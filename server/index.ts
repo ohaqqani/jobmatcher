@@ -56,8 +56,8 @@ app.use((req, res, next) => {
     serveStatic(app);
   }
 
-  // Railway provides PORT environment variable, fallback to 5000 for local development
-  const port = parseInt(process.env.PORT || '5000', 10);
+  // Railway provides PORT environment variable, fallback to 5001 for local development
+  const port = parseInt(process.env.PORT || '5001', 10);
   
   server.listen(port, "0.0.0.0", () => {
     log(`Server running on port ${port} in ${process.env.NODE_ENV || 'development'} mode`);
