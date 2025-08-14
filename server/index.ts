@@ -37,14 +37,22 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  // Add health check endpoint
+  app.get('/health', (_req, res) => {
+    res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
+  });
+
   const server = await registerRoutes(app);
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
 
-    res.status(status).json({ message });
-    throw err;
+    console.error('Server error:', err);
+    
+    if (!res.headersSent) {
+      res.status(status).json({ message });
+    }
   });
 
   // importantly only setup vite in development and after
@@ -56,10 +64,14 @@ app.use((req, res, next) => {
     serveStatic(app);
   }
 
-  // Railway provides PORT environment variable, fallback to 5001 for local development
-  const port = parseInt(process.env.PORT || '5001', 10);
+  // Railway provides PORT environment variable, fallback to 3000 for local development
+  const port = parseInt(process.env.PORT || '3000', 10);
   
   server.listen(port, "0.0.0.0", () => {
+    console.log(`Server running on port ${port} in ${process.env.NODE_ENV || 'development'} mode`);
     log(`Server running on port ${port} in ${process.env.NODE_ENV || 'development'} mode`);
   });
-})();
+})().catch((error) => {
+  console.error('Failed to start server:', error);
+  process.exit(1);
+});

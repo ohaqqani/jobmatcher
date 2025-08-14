@@ -10,8 +10,14 @@ import { storage } from "./storage";
 
 dotenv.config();
 
+// Validate required environment variables
+if (!process.env.OPENAI_API_KEY && process.env.NODE_ENV === 'production') {
+  console.error('ERROR: OPENAI_API_KEY is required in production');
+  process.exit(1);
+}
+
 const openai = new OpenAI({ 
-  apiKey: process.env.OPENAI_API_KEY 
+  apiKey: process.env.OPENAI_API_KEY || 'dummy-key-for-dev'
 });
 
 // Configure multer for file uploads
