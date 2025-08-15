@@ -21,7 +21,7 @@ export default function Home() {
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center">
               <Search className="text-primary text-2xl mr-3" />
-              <h1 className="text-xl font-semibold text-gray-900">Resume Matcher</h1>
+              <h1 className="text-xl font-semibold text-gray-900">Job Matcher</h1>
             </div>
             <div className="flex items-center space-x-4">
               <Button variant="ghost" size="sm">
