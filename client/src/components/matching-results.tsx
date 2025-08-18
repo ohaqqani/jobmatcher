@@ -56,7 +56,6 @@ export default function MatchingResults({ jobId, resumeIds }: MatchingResultsPro
     
     if (resumeIds.length > 0 && results.length === 0 && !isMatching && !matchMutation.isPending && 
         !hasTriggeredMatching.current && resumeIdsChanged) {
-      console.log('Auto-triggering matching for:', resumeIds.length, 'resumes');
       hasTriggeredMatching.current = true;
       currentResumeIds.current = [...resumeIds];
       setIsMatching(true);

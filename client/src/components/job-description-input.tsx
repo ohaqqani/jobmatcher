@@ -92,26 +92,27 @@ export default function JobDescriptionInput({ onJobCreated, currentJobId, setIsA
   };
 
   return (
-    <Card className="border border-gray-200">
+    <Card className="border border-slate-200 shadow-lg hover:shadow-xl transition-shadow duration-300">
       <CardContent className="p-6">
-        <div className="flex items-center mb-4">
-          <Briefcase className="text-primary mr-2 h-5 w-5" />
-          <h2 className="text-lg font-semibold text-gray-900">Job Description</h2>
+        <div className="flex items-center mb-6">
+          <Briefcase className="text-blue-600 mr-3 h-6 w-6" />
+          <h2 className="text-xl font-bold text-slate-900">Job Description</h2>
         </div>
         
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
             <FormField
               control={form.control}
               name="title"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="text-sm font-medium text-gray-700">Job Title</FormLabel>
+                  <FormLabel className="text-sm font-semibold text-slate-700">Job Title</FormLabel>
                   <FormControl>
                     <Input
                       placeholder="e.g., Executive Assistant, Office Administrator, Virtual Assistant"
                       {...field}
                       disabled={createJobMutation.isPending}
+                      className="border-slate-300 focus:border-blue-500 focus:ring-blue-500/20 transition-all duration-200"
                     />
                   </FormControl>
                   <FormMessage />
@@ -124,14 +125,14 @@ export default function JobDescriptionInput({ onJobCreated, currentJobId, setIsA
               name="description"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="text-sm font-medium text-gray-700">
+                  <FormLabel className="text-sm font-semibold text-slate-700">
                     Description & Requirements
                   </FormLabel>
                   <FormControl>
                     <Textarea
                       placeholder="Enter job description and requirements here..."
                       rows={8}
-                      className="resize-none"
+                      className="resize-none border-slate-300 focus:border-blue-500 focus:ring-blue-500/20 transition-all duration-200"
                       {...field}
                       disabled={createJobMutation.isPending}
                     />
@@ -144,7 +145,7 @@ export default function JobDescriptionInput({ onJobCreated, currentJobId, setIsA
             {!currentJobId ? (
               <Button
                 type="submit"
-                className="w-full"
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold shadow-md hover:shadow-lg transition-all duration-200"
                 disabled={createJobMutation.isPending}
               >
                 {createJobMutation.isPending ? (
@@ -163,7 +164,7 @@ export default function JobDescriptionInput({ onJobCreated, currentJobId, setIsA
               <Button
                 type="button"
                 onClick={handleAnalyze}
-                className="w-full"
+                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold shadow-md hover:shadow-lg transition-all duration-200"
                 disabled={isAnalyzing || analyzeJobMutation.isPending}
               >
                 {isAnalyzing || analyzeJobMutation.isPending ? (

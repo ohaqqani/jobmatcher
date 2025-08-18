@@ -18,168 +18,198 @@ export default function CandidateRow({ candidate, index, isExpanded, onToggle }:
     return 'bg-destructive';
   };
 
+  const getMatchBadge = (score: number) => {
+    if (score >= 80) return { text: 'Excellent', variant: 'default' as const };
+    if (score >= 60) return { text: 'Good', variant: 'secondary' as const };
+    return { text: 'Needs Review', variant: 'destructive' as const };
+  };
+
+  // Handle missing matchResult
+  const matchScore = candidate.matchResult?.matchScore ?? 0;
+  const badge = getMatchBadge(matchScore);
+
   return (
     <>
-      <tr className="hover:bg-gray-50">
-        <td className="px-6 py-4 whitespace-nowrap max-w-[200px]">
+      <tr className="hover:bg-slate-50/80 transition-all duration-300 border-b border-slate-200 bg-white shadow-sm hover:shadow-md group">
+        {/* Candidate Column */}
+        <td className="px-6 py-6 w-64 overflow-hidden border-r border-slate-200">
           <div className="mb-3">
-            <div className="text-sm font-medium text-gray-900 text-wrap">
+            <div className="text-sm font-semibold text-slate-900 truncate group-hover:text-blue-700 transition-colors">
               {candidate.firstName} {candidate.lastName}
             </div>
-            <div className="text-sm text-gray-500 truncate">{candidate.resume.fileName}</div>
+            <div className="text-sm text-slate-500 truncate">{candidate.resume.fileName}</div>
           </div>
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger>
-                <div className="text-sm text-gray-900 text-wrap truncate max-w-[200px] cursor-help">
+                <div className="text-sm text-slate-700 truncate cursor-help hover:text-blue-600 transition-colors">
                   {candidate.email}
                 </div>
               </TooltipTrigger>
-              <TooltipContent side="top" className="max-w-xs">
+              <TooltipContent side="top" className="max-w-xs bg-slate-800 text-white border-slate-700">
                 <div>
                   <p>{candidate.email}</p>
                 </div>
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
-          <div className="text-sm text-gray-500">{candidate.phone || 'N/A'}</div>
+          <div className="text-sm text-slate-500">{candidate.phone || 'N/A'}</div>
         </td>
 
-        <td className="px-6 py-4 whitespace-nowrap">
-          <div className="flex items-center max-w-[100px]">
-            <div className="flex-1 bg-gray-200 rounded-full h-2 mr-3">
-              <div
-                className={`h-2 rounded-full ${getMatchColor(candidate.matchResult.matchScore)}`}
-                style={{ width: `${candidate.matchResult.matchScore}%` }}
-              />
+        {/* Experience & Key Skills Column */}
+        <td className="px-6 py-4 w-auto border-r border-slate-200">
+          <div className="space-y-3">
+            {/* Experience Section */}
+            {candidate.experience && (
+              <div className="mb-3">
+                <div className="text-xs font-semibold text-slate-600 uppercase tracking-wider mb-2">
+                  Experience
+                </div>
+                <div className="text-sm text-slate-700 leading-relaxed">
+                  {candidate.experience.length > 120 
+                    ? `${candidate.experience.substring(0, 120)}...` 
+                    : candidate.experience}
+                </div>
+              </div>
+            )}
+
+            {/* Skills Section */}
+            <div>
+              <div className="text-xs font-semibold text-slate-600 uppercase tracking-wider mb-2">
+                Key Skills
+              </div>
+              {candidate.skills && candidate.skills.length > 0 ? (
+                <div className="flex flex-wrap gap-1.5">
+                  {candidate.skills.slice(0, 6).map((skill: string, index: number) => (
+                    <span
+                      key={index}
+                      className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-slate-800 text-white"
+                    >
+                      {skill}
+                    </span>
+                  ))}
+                  {candidate.skills.length > 6 && (
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger>
+                          <span className="text-xs text-slate-500 px-2 py-1 font-medium cursor-help hover:text-blue-600 transition-colors">
+                            +{candidate.skills.length - 6} more
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-xs bg-slate-800 text-white border-slate-700">
+                          <div className="space-y-1">
+                            <p className="font-semibold text-xs mb-2">Additional Skills:</p>
+                            {candidate.skills.slice(6).map((skill: string, index: number) => (
+                              <div key={index} className="text-xs">• {skill}</div>
+                            ))}
+                          </div>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  )}
+                </div>
+              ) : (
+                <div className="text-sm text-slate-400 italic">
+                  No skills listed
+                </div>
+              )}
             </div>
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger>
-                  <span className="text-sm font-semibold text-gray-900 font-mono cursor-help">
-                    {candidate.matchResult.matchScore}%
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent side="top" className="max-w-lg">
-                  <div className="p-2">
-                    <h4 className="font-semibold mb-2 text-sm">Detailed Scorecard</h4>
-                    {candidate.matchResult.scorecard && Object.keys(candidate.matchResult.scorecard).length > 0 ? (
-                      <table className="w-full text-xs border-collapse">
-                        <thead>
-                          <tr className="border-b">
-                            <th className="text-left py-1 px-2 font-medium">Criteria</th>
-                            <th className="text-left py-1 px-2 font-medium">Weight</th>
-                            <th className="text-left py-1 px-2 font-medium">Score</th>
-                            <th className="text-left py-1 px-2 font-medium">Comments</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {Object.entries(candidate.matchResult.scorecard).map(([criteria, details]: [string, any]) => (
-                            <tr key={criteria} className="border-b border-gray-100">
-                              <td className="py-1 px-2 font-medium">{criteria}</td>
-                              <td className="py-1 px-2">{details?.weight || details?.[0] || 'N/A'}</td>
-                              <td className="py-1 px-2">{details?.score || details?.[1] || 'N/A'}</td>
-                              <td className="py-1 px-2 max-w-[200px] text-wrap">{details?.comments || details?.[2] || 'N/A'}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    ) : (
-                      <p className="text-xs text-gray-500">No detailed scorecard available</p>
-                    )}
-                  </div>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
           </div>
         </td>
 
-        <td className="px-6 py-4 whitespace-nowrap max-w-lg">
-          <div className="text-sm text-gray-900 text-wrap">
-            {typeof candidate.experience === 'string' 
-              ? candidate.experience 
-              : candidate.experience 
-                ? JSON.stringify(candidate.experience).replace(/[{}",]/g, ' ').trim()
-                : 'N/A'
-            }
-          </div>
-          <div className="flex flex-wrap gap-1 mt-3">
-            {candidate.skills?.slice(0, 3).map((skill, index) => (
-              <Badge key={index} variant="secondary" className="text-xs">
-                {skill}
-              </Badge>
-            ))}
-            {candidate.skills && candidate.skills.length > 3 && (
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger>
-                    <Badge variant="outline" className="text-xs cursor-help">
-                      +{candidate.skills.length - 3} more
-                    </Badge>
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom" className="max-w-xs">
-                    <div className="flex flex-wrap gap-1">
-                      {candidate.skills.slice(3).map((skill, index) => (
-                        <Badge key={index} variant="secondary" className="text-xs">
-                          {skill}
-                        </Badge>
-                      ))}
-                    </div>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            )}
-          </div>
-        </td>
-
-        <td className="px-6 py-4 whitespace-nowrap">
-          <Badge 
-            variant={candidate.matchResult.matchScore >= 80 ? "default" : candidate.matchResult.matchScore >= 60 ? "secondary" : "outline"}
-            className="gap-1 mb-2"
-          >
-            {candidate.matchResult.matchScore >= 80 ? (
-              <>
-                <TrendingUp className="h-3 w-3" />
-                Excellent
-              </>
-            ) : candidate.matchResult.matchScore >= 60 ? (
-              <>
-                <BarChart3 className="h-3 w-3" />
-                Good
-              </>
-            ) : (
-              "Needs Review"
-            )}
-          </Badge>
-          <div>
-            <Button 
-              variant="ghost" 
-              size="sm"
-              onClick={onToggle}
-            >
-              {isExpanded ? "Hide Details" : "View Details"}
-            </Button>
+        {/* Match Score Column (now rightmost) */}
+        <td className="px-6 py-4 w-40">
+          <div className="space-y-4">
+            <div className="flex justify-center">
+              <Badge variant={badge.variant} className="shadow-sm font-semibold">{badge.text}</Badge>
+            </div>
+            <div className="text-center">
+              <div className="text-3xl font-bold text-slate-900 mb-2">{matchScore}%</div>
+              <div className="w-full bg-slate-200 rounded-full h-2.5 shadow-inner">
+                <div
+                  className={`h-2.5 rounded-full transition-all duration-500 ${getMatchColor(matchScore)} shadow-sm`}
+                  style={{ width: `${matchScore}%` }}
+                ></div>
+              </div>
+            </div>
+            <div className="flex justify-center">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onToggle}
+                className="text-xs font-medium border-slate-300 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700 transition-all duration-200"
+              >
+                {isExpanded ? 'Hide Analysis' : 'View Analysis'}
+              </Button>
+            </div>
           </div>
         </td>
       </tr>
 
       {isExpanded && (
-        <tr>
-          <td colSpan={5} className="py-4 px-6 bg-muted/20">
-            <div className="space-y-4">
-              <h4 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide">
-                AI Analysis
-              </h4>
-              <div className="prose prose-sm max-w-none dark:prose-invert">
+        <tr className="bg-gradient-to-r from-blue-50/80 via-slate-50 to-indigo-50/80 border-b-2 border-blue-200/60 shadow-inner">
+          <td colSpan={3} className="px-8 py-8">
+            <div className="space-y-6 max-w-none">
+              {/* Scorecard Section */}
+              <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-lg hover:shadow-xl transition-shadow duration-300">
+                <h4 className="text-lg font-bold text-slate-900 mb-4 flex items-center">
+                  <BarChart3 className="h-5 w-5 mr-3 text-blue-600" />
+                  Detailed Scorecard
+                </h4>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b-2 border-slate-200 bg-slate-50/50">
+                        <th className="text-left py-3 px-4 font-semibold text-slate-700">Category</th>
+                        <th className="text-center py-3 px-4 font-semibold text-slate-700">Score</th>
+                        <th className="text-center py-3 px-4 font-semibold text-slate-700">Weight</th>
+                        <th className="text-center py-3 px-4 font-semibold text-slate-700">Weighted Score</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {candidate.matchResult?.scorecard && Object.entries(candidate.matchResult.scorecard).map(([category, data], index) => {
+
+                        let score: number;
+                        let weight: number;
+
+                        // Now that the schema is correct, we can access the properties directly
+                        score = data.score || 0;
+                        weight = data.weight || 0;
+
+                        const weightedScore = Math.round((score * weight) / 100);
+                        
+                        return (
+                          <tr key={index} className="border-b border-slate-100 hover:bg-blue-50/50 transition-colors">
+                            <td className="py-3 px-4 font-semibold text-slate-900">{category}</td>
+                            <td className="text-center py-3 px-4">
+                              <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-800 border border-blue-200">
+                                {Math.round(score)}/100
+                              </span>
+                            </td>
+                            <td className="text-center py-3 px-4 text-slate-600 font-medium">{Math.round(weight)}%</td>
+                            <td className="text-center py-3 px-4">
+                              <span className="font-bold text-slate-900">
+                                {weightedScore}/100
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Analysis Section */}
+              <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-lg hover:shadow-xl transition-shadow duration-300">
+                <h4 className="text-lg font-bold text-slate-900 mb-4 flex items-center">
+                  <TrendingUp className="h-5 w-5 mr-3 text-emerald-600" />
+                  Analysis
+                </h4>
                 <div 
-                  className="text-sm text-gray-600 text-wrap max-w-none
-                    [&_h1]:text-sm [&_h1]:font-bold [&_h1]:text-gray-800 [&_h1]:mt-4 [&_h1]:mb-1
-                    [&_p]:mb-1 [&_p]:leading-snug
-                    [&_ul]:my-1 [&_ul]:pl-4 [&_ul]:list-disc [&_ul]:list-outside
-                    [&_li]:mb-0.5 [&_li]:leading-snug
-                    [&_strong]:font-medium [&_strong]:text-gray-900"
+                  className="text-slate-700 leading-relaxed prose prose-sm max-w-none prose-headings:text-slate-900 prose-strong:text-slate-900 prose-blue"
                   dangerouslySetInnerHTML={{ 
-                    __html: candidate.matchResult.analysis?.replace(/\n/g, '<br>') || '<p>No analysis available</p>' 
+                    __html: candidate.matchResult?.analysis || 'No analysis available' 
                   }}
                 />
               </div>

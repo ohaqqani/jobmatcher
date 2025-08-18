@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, jsonb, integer, timestamp } from "drizzle-orm/pg-core";
+import { integer, jsonb, pgTable, text, timestamp, varchar } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -37,7 +37,7 @@ export const matchResults = pgTable("match_results", {
   jobDescriptionId: varchar("job_description_id").references(() => jobDescriptions.id).notNull(),
   candidateId: varchar("candidate_id").references(() => candidates.id).notNull(),
   matchScore: integer("match_score").notNull(),
-  scorecard: jsonb("scorecard").$type<Record<string, number>>().default({}),
+  scorecard: jsonb("scorecard").$type<Record<string, { weight: number; score: number; comments: string }>>().default({}),
   matchingSkills: jsonb("matching_skills").$type<string[]>().default([]),
   analysis: text("analysis"),
   createdAt: timestamp("created_at").defaultNow(),
