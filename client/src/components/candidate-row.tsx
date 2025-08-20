@@ -66,9 +66,7 @@ export default function CandidateRow({ candidate, index, isExpanded, onToggle }:
                   Experience
                 </div>
                 <div className="text-sm text-slate-700 leading-relaxed">
-                  {candidate.experience.length > 120 
-                    ? `${candidate.experience.substring(0, 120)}...` 
-                    : candidate.experience}
+                  {candidate.experience}
                 </div>
               </div>
             )}
@@ -164,6 +162,7 @@ export default function CandidateRow({ candidate, index, isExpanded, onToggle }:
                         <th className="text-center py-3 px-4 font-semibold text-slate-700">Score</th>
                         <th className="text-center py-3 px-4 font-semibold text-slate-700">Weight</th>
                         <th className="text-center py-3 px-4 font-semibold text-slate-700">Weighted Score</th>
+                        <th className="text-left py-3 px-4 font-semibold text-slate-700">Comments</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -171,10 +170,12 @@ export default function CandidateRow({ candidate, index, isExpanded, onToggle }:
 
                         let score: number;
                         let weight: number;
+                        let comments: string;
 
                         // Now that the schema is correct, we can access the properties directly
                         score = data.score || 0;
                         weight = data.weight || 0;
+                        comments = data.comments || 'No comments available';
 
                         const weightedScore = Math.round((score * weight) / 100);
                         
@@ -191,6 +192,9 @@ export default function CandidateRow({ candidate, index, isExpanded, onToggle }:
                               <span className="font-bold text-slate-900">
                                 {weightedScore}/100
                               </span>
+                            </td>
+                            <td className="py-3 px-4 text-sm text-slate-600 leading-relaxed">
+                              {comments}
                             </td>
                           </tr>
                         );
