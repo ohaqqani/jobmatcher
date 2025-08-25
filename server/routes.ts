@@ -401,7 +401,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Upload and process resumes
-  app.post("/api/resumes/upload", upload.array('resumes', 100), async (req, res) => {
+  app.post("/api/resumes/upload", upload.array('file', 100), async (req, res) => {
     try {
       if (!req.files || !Array.isArray(req.files) || req.files.length === 0) {
         return res.status(400).json({ message: "No files uploaded" });
@@ -468,7 +468,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return {
             resumeId: resume.id,
             candidateId: candidate.id,
+            candidateInfo: candidateInfo,
             fileName: file.originalname,
+            resumePlainText: content,
             status: 'completed',
             fileIndex: index + 1
           };

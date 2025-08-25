@@ -4,7 +4,6 @@ import { CloudUpload, FileText, Settings, CheckCircle, X, AlertCircle } from "lu
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest } from "@/lib/queryClient";
 
 interface ResumeUploadProps {
   onFilesUploaded: (resumeIds: string[]) => void;
@@ -108,7 +107,7 @@ export default function ResumeUpload({
     // Create form data
     const formData = new FormData();
     validFiles.forEach(file => {
-      formData.append('resumes', file);
+      formData.append('file', file);
     });
 
     uploadMutation.mutate(formData);
