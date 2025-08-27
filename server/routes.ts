@@ -1,4 +1,5 @@
 import { insertJobDescriptionSchema } from "@shared/schema";
+import AdmZip from "adm-zip";
 import dotenv from 'dotenv';
 import type { Express } from "express";
 import { createServer, type Server } from "http";
@@ -30,12 +31,33 @@ const upload = multer({
     const allowedTypes = [
       'application/pdf',
       'application/msword',
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/zip',
+      'application/x-zip-compressed',
+      'application/octet-stream' // for Zapier/misc clients
     ];
     if (allowedTypes.includes(file.mimetype)) {
-      cb(null, true);
+      // If octet-stream or zip, check extension
+      const ext = file.originalname.split('.').pop()?.toLowerCase();
+      if (
+        file.mimetype === 'application/octet-stream' &&
+        !['pdf', 'doc', 'docx', 'zip'].includes(ext || '')
+      ) {
+        cb(new Error('Invalid file type. Only PDF, DOC, DOCX, and ZIP files are allowed.'));
+      } else if (
+        (file.mimetype === 'application/zip' || file.mimetype === 'application/x-zip-compressed' || (file.mimetype === 'application/octet-stream' && ext === 'zip'))
+      ) {
+        cb(null, true);
+      } else if (
+        ['pdf', 'doc', 'docx'].includes(ext || '') ||
+        allowedTypes.includes(file.mimetype)
+      ) {
+        cb(null, true);
+      } else {
+        cb(new Error('Invalid file type. Only PDF, DOC, DOCX, and ZIP files are allowed.'));
+      }
     } else {
-      cb(new Error('Invalid file type. Only PDF, DOC, and DOCX files are allowed.'));
+      cb(new Error('Invalid file type. Only PDF, DOC, DOCX, and ZIP files are allowed.'));
     }
   }
 });
@@ -407,15 +429,63 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "No files uploaded" });
       }
 
-      console.log(`Processing ${req.files.length} files in parallel...`);
+      // Helper to flatten files from zips and normal files
+      const extractFilesFromUploads = async (files: Express.Multer.File[]) => {
+        const extracted: { file: Express.Multer.File, buffer: Buffer, originalname: string, mimetype: string }[] = [];
+        for (const file of files) {
+          const ext = file.originalname.split('.').pop()?.toLowerCase();
+          if (
+            file.mimetype === 'application/zip' ||
+            file.mimetype === 'application/x-zip-compressed' ||
+            (file.mimetype === 'application/octet-stream' && ext === 'zip')
+          ) {
+            // Unzip and push valid files
+            const zip = new AdmZip(file.buffer);
+            const entries = zip.getEntries();
+            for (const entry of entries) {
+              if (entry.isDirectory) continue;
+              const entryExt = entry.entryName.split('.').pop()?.toLowerCase();
+              if (['pdf', 'doc', 'docx'].includes(entryExt || '')) {
+                extracted.push({
+                  file,
+                  buffer: entry.getData(),
+                  originalname: entry.entryName,
+                  mimetype:
+                    entryExt === 'pdf'
+                      ? 'application/pdf'
+                      : entryExt === 'doc'
+                      ? 'application/msword'
+                      : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+                });
+              }
+            }
+          } else {
+            extracted.push({
+              file,
+              buffer: file.buffer,
+              originalname: file.originalname,
+              mimetype: file.mimetype
+            });
+          }
+        }
+        return extracted;
+      };
+
+      const allFiles = await extractFilesFromUploads(req.files);
+
+      if (allFiles.length === 0) {
+        return res.status(400).json({ message: "No valid files found in upload (PDF, DOC, DOCX only)" });
+      }
+
+      console.log(`Processing ${allFiles.length} files in parallel...`);
 
       // Process all files concurrently with comprehensive error handling
-      const filePromises = req.files.map(async (file, index) => {
+      const filePromises = allFiles.map(async (item, index) => {
+        const { buffer, originalname, mimetype } = item;
         try {
-          console.log(`Processing file ${index + 1}/${req.files!.length}: ${file.originalname}, size: ${file.size}, type: ${file.mimetype}`);
-          
+          console.log(`Processing file ${index + 1}/${allFiles.length}: ${originalname}, size: ${buffer.length}, type: ${mimetype}`);
           // Extract text from file with timeout protection
-          const extractionPromise = extractTextFromFile(file.buffer, file.mimetype);
+          const extractionPromise = extractTextFromFile(buffer, mimetype);
           const timeoutPromise = new Promise<never>((_, reject) => {
             setTimeout(() => reject(new Error('File processing timeout after 30 seconds')), 30000);
           });
@@ -423,9 +493,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           let content: string;
           try {
             content = await Promise.race([extractionPromise, timeoutPromise]);
-            console.log(`Extracted text length: ${content.length} characters for ${file.originalname}`);
+            console.log(`Extracted text length: ${content.length} characters for ${originalname}`);
           } catch (extractError) {
-            console.error(`Failed to extract text from ${file.originalname}:`, extractError);
+            console.error(`Failed to extract text from ${originalname}:`, extractError);
             throw new Error(`Text extraction failed: ${extractError instanceof Error ? extractError.message : 'Unknown extraction error'}`);
           }
           
@@ -433,13 +503,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
           let resume;
           try {
             resume = await storage.createResume({
-              fileName: file.originalname,
-              fileSize: file.size,
-              fileType: file.mimetype,
+              fileName: originalname,
+              fileSize: buffer.length,
+              fileType: mimetype,
               content,
             });
           } catch (resumeError) {
-            console.error(`Failed to create resume record for ${file.originalname}:`, resumeError);
+            console.error(`Failed to create resume record for ${originalname}:`, resumeError);
             throw new Error(`Database error: ${resumeError instanceof Error ? resumeError.message : 'Failed to save resume'}`);
           }
 
@@ -447,9 +517,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           let candidateInfo;
           try {
             candidateInfo = await extractCandidateInfo(content);
-            console.log(`Extracted candidate info for: ${candidateInfo.firstName} ${candidateInfo.lastName} from ${file.originalname}`);
+            console.log(`Extracted candidate info for: ${candidateInfo.firstName} ${candidateInfo.lastName} from ${originalname}`);
           } catch (aiError) {
-            console.error(`Failed to extract candidate info from ${file.originalname}:`, aiError);
+            console.error(`Failed to extract candidate info from ${originalname}:`, aiError);
             throw new Error(`AI processing failed: ${aiError instanceof Error ? aiError.message : 'Failed to analyze resume content'}`);
           }
           
@@ -461,7 +531,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               ...candidateInfo,
             });
           } catch (candidateError) {
-            console.error(`Failed to create candidate record for ${file.originalname}:`, candidateError);
+            console.error(`Failed to create candidate record for ${originalname}:`, candidateError);
             throw new Error(`Database error: ${candidateError instanceof Error ? candidateError.message : 'Failed to save candidate'}`);
           }
 
@@ -469,7 +539,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             resumeId: resume.id,
             candidateId: candidate.id,
             candidateInfo: candidateInfo,
-            fileName: file.originalname,
+            fileName: originalname,
             resumePlainText: content,
             status: 'completed',
             fileIndex: index + 1
@@ -477,16 +547,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-          console.error(`Failed to process file ${file.originalname}:`, {
+          console.error(`Failed to process file ${originalname}:`, {
             error: errorMessage,
             fileIndex: index + 1,
-            fileName: file.originalname,
-            fileSize: file.size,
-            mimeType: file.mimetype
+            fileName: originalname,
+            fileSize: buffer.length,
+            mimeType: mimetype
           });
-          
+
           return {
-            fileName: file.originalname,
+            fileName: originalname,
             status: 'failed',
             error: errorMessage,
             fileIndex: index + 1
@@ -501,7 +571,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const successfulUploads = results.filter(r => r?.status === 'completed');
       const failedUploads = results.filter(r => r?.status === 'failed');
       
-      console.log(`Upload batch completed: ${successfulUploads.length} successful, ${failedUploads.length} failed out of ${req.files.length} total files`);
+      console.log(`Upload batch completed: ${successfulUploads.length} successful, ${failedUploads.length} failed out of ${allFiles.length} total files`);
       
       if (failedUploads.length > 0) {
         console.error('Failed files:', failedUploads.map(f => ({ fileName: f?.fileName, error: f?.error })));
@@ -511,10 +581,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ 
         results,
         summary: {
-          totalFiles: req.files.length,
+          totalFiles: allFiles.length,
           successfulUploads: successfulUploads.length,
           failedUploads: failedUploads.length,
-          message: `Successfully processed ${successfulUploads.length} out of ${req.files.length} files`
+          message: `Successfully processed ${successfulUploads.length} out of ${allFiles.length} files`
         }
       });
     } catch (error) {
