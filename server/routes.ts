@@ -470,8 +470,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
         return extracted;
       };
-
-      const allFiles = await extractFilesFromUploads(req.files);
+      
+            const allFiles = await extractFilesFromUploads(req.files);
 
       if (allFiles.length === 0) {
         return res.status(400).json({ message: "No valid files found in upload (PDF, DOC, DOCX only)" });
