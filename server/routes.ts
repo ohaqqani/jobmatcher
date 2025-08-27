@@ -191,9 +191,11 @@ Return a comprehensive but focused list of skills that candidates should have or
 async function extractCandidateInfo(resumeText: string): Promise<{
   firstName: string;
   lastName: string;
+  lastInitial: string;
   email: string;
   phone?: string;
   skills: string[];
+  skills_comma_separated: string;
   experience?: string;
 }> {
   try {
@@ -205,7 +207,7 @@ async function extractCandidateInfo(resumeText: string): Promise<{
           content: `You are an expert resume parser and skills analyst. Extract comprehensive candidate information optimized for job matching.
 
 CANDIDATE INFO EXTRACTION GUIDELINES:
-- Extract the candidate's first name, last name, email address, and phone number
+- Extract the candidate's first name, last name, last initial, email address, and phone number
 
 SKILLS EXTRACTION GUIDELINES:
 - Extract technical skills, programming languages, frameworks, and tools
@@ -226,10 +228,12 @@ Return comprehensive data to enable effective fuzzy matching.
 REQUIRED JSON FORMAT:
 {
   "firstName": "candidate first name",
-  "lastName": "candidate last name", 
+  "lastName": "candidate last name",
+  "lastInitial": "candidate last initial",
   "email": "email address",
   "phone": "phone number",
   "skills": ["skill1", "skill2", "skill3"],
+  "skills_comma_separated": "skill1, skill2, skill3",
   "experience": "text summary of experience"
 }
 
@@ -253,10 +257,12 @@ Ensure all fields use these exact field names and data types.`
     
     return {
       firstName: candidateData.firstName || candidateData.first_name || result.firstName || result.first_name || "Unknown",
-      lastName: candidateData.lastName || candidateData.last_name || result.lastName || result.last_name || "Unknown", 
+      lastName: candidateData.lastName || candidateData.last_name || result.lastName || result.last_name || "Unknown",
+      lastInitial: candidateData.lastInitial || candidateData.last_initial || result.lastInitial || result.last_initial || "Unknown",
       email: candidateData.email || candidateData.emailAddress || result.email || result.emailAddress || "",
       phone: candidateData.phone || candidateData.phoneNumber || candidateData.phone_number || result.phone || result.phoneNumber || result.phone_number,
       skills: Array.isArray(result.skills) ? result.skills : [],
+      skills_comma_separated: result.skills_comma_separated || "Unknown",
       experience: result.experience_summary || result.experience || candidateData.experience_summary || candidateData.experience || "Experience details not available"
     };
   } catch (error) {
@@ -264,8 +270,10 @@ Ensure all fields use these exact field names and data types.`
     return {
       firstName: "Unknown",
       lastName: "Unknown",
+      lastInitial: "Unknown",
       email: "",
       skills: [],
+      skills_comma_separated: "",
       experience: "Failed to extract experience information"
     };
   }
