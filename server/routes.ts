@@ -25,7 +25,7 @@ const openai = new OpenAI({
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: {
-    fileSize: 10 * 1024 * 1024, // 10MB limit
+    fileSize: 300 * 1024 * 1024, // 300MB limit
   },
   fileFilter: (req, file, cb) => {
     const allowedTypes = [
