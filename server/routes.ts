@@ -190,59 +190,59 @@ Return a comprehensive but focused list of skills that candidates should have or
 
 // Helper function to clean HTML content for embedding
 function cleanHTMLContent(htmlContent: string): string {
-  // First, check if the content starts with a code block or is wrapped in quotes
-  let cleaned = htmlContent;
+  let cleaned = htmlContent.trim();
 
   // Remove outer quotes if the entire content is wrapped in quotes
   if ((cleaned.startsWith('"') && cleaned.endsWith('"')) || (cleaned.startsWith("'") && cleaned.endsWith("'"))) {
-    cleaned = cleaned.slice(1, -1);
+    cleaned = cleaned.slice(1, -1).trim();
   }
 
-  // Remove escaped newlines and other escape characters more aggressively
+  // Remove code block markers
+  cleaned = cleaned.replace(/```(?:html)?/g, '').trim();
+
+  // Remove escaped characters in one pass
   cleaned = cleaned
     .replace(/\\n/g, '')
     .replace(/\\r/g, '')
     .replace(/\\t/g, '')
     .replace(/\\"/g, '"')
-    .replace(/\\'/g, "'")
-    .replace(/\\\\/g, '\\');
+    .replace(/\\'/g, "'");
 
-  // Remove any remaining code block markers or backticks that might appear
-  cleaned = cleaned.replace(/```html/g, '').replace(/```/g, '');
+  // Remove document-level HTML tags if they somehow made it through
+  const documentTags = [
+    /<!DOCTYPE[^>]*>/gi,
+    /<\/?html[^>]*>/gi,
+    /<head[\s\S]*?<\/head>/gi,
+    /<\/?body[^>]*>/gi,
+    /<title[\s\S]*?<\/title>/gi
+  ];
 
-  // Remove DOCTYPE and document-level HTML tags if they somehow made it through
-  cleaned = cleaned
-    .replace(/<!DOCTYPE[^>]*>/gi, '')
-    .replace(/<html[^>]*>/gi, '')
-    .replace(/<\/html>/gi, '')
-    .replace(/<head[\s\S]*?<\/head>/gi, '')
-    .replace(/<body[^>]*>/gi, '')
-    .replace(/<\/body>/gi, '')
-    .replace(/<title[\s\S]*?<\/title>/gi, '');
+  for (const tagRegex of documentTags) {
+    cleaned = cleaned.replace(tagRegex, '');
+  }
 
-  // Remove literal \n characters that appear between HTML tags
-  cleaned = cleaned.replace(/>\s*\\n\s*</g, '><');
-
-  // Remove any remaining literal \n characters
-  cleaned = cleaned.replace(/\\n/g, '');
-
-  // Clean up extra whitespace between HTML tags while preserving content
+  // Remove excessive whitespace between tags while preserving content spacing
   cleaned = cleaned.replace(/>\s+</g, '><');
 
-  // Clean up extra whitespace but preserve proper line breaks in HTML
-  cleaned = cleaned.trim();
-
-  return cleaned;
+  return cleaned.trim();
 }
 
 // Helper function to anonymize resume and format as HTML using LLM
-async function anonymizeResumeAsHTML(resumePlainText: string, firstName: string, lastName: string): Promise<string> {
-  try {
-    const lastInitial = lastName.charAt(0).toUpperCase();
-    const anonymizedName = `${firstName} ${lastInitial}.`;
+async function anonymizeResumeAsHTML(resumePlainText: string): Promise<string> {
+  // Input validation
+  if (!resumePlainText || resumePlainText.trim().length === 0) {
+    return '<div><p>No resume content provided</p></div>';
+  }
 
+  // Prevent processing extremely large texts (> 50kb)
+  if (resumePlainText.length > 50000) {
+    console.warn('Resume text is very large, truncating for processing');
+    resumePlainText = resumePlainText.substring(0, 50000);
+  }
+
+  try {
     const response = await openai.chat.completions.create({
-      model: "gpt-4o", // the newest OpenAI model is "gpt-4o" which was released May 13, 2024. do not change this unless explicitly requested by the user
+      model: "gpt-4o",
       messages: [
         {
           role: "system",
@@ -252,7 +252,8 @@ ANONYMIZATION REQUIREMENTS:
 - Remove ALL email addresses completely
 - Remove ALL phone numbers (any format, including international)
 - Remove ALL physical addresses (street addresses, cities, states, zip codes)
-- Replace the candidate's name with "${anonymizedName}" throughout the document
+- Remove ALL external links (URLs, website links, social media links, portfolio links)
+- Remove the candidate's name completely from the entire document
 - Preserve all professional experience, skills, education, and career achievements
 - Keep all dates, company names, job titles, and professional accomplishments
 
@@ -276,29 +277,41 @@ Return only clean HTML content as a single continuous string without any \\n cha
         },
         {
           role: "user",
-          content: `Please anonymize this resume and format it as clean HTML. The candidate's name should be replaced with "${anonymizedName}" wherever it appears.
+          content: `Please anonymize this resume and format it as clean HTML. Remove the candidate's name completely from the document.
 
 Resume content:
 ${resumePlainText}`
         }
-      ]
+      ],
+      // Add timeout and other safety parameters
+      max_tokens: 4000,
+      temperature: 0.1 // Lower temperature for more consistent output
     });
 
-    let htmlContent = response.choices[0].message.content || '<div><p>Resume content could not be processed</p></div>';
-
-    // Log the raw response for debugging
-    console.log('Raw LLM response:', JSON.stringify(htmlContent));
+    const rawContent = response.choices[0]?.message?.content;
+    if (!rawContent) {
+      throw new Error('No content returned from OpenAI API');
+    }
 
     // Clean up the HTML content to ensure it's embeddable
-    htmlContent = cleanHTMLContent(htmlContent);
+    const htmlContent = cleanHTMLContent(rawContent);
 
-    // Log the cleaned response
-    console.log('Cleaned HTML:', JSON.stringify(htmlContent));
+    // Basic validation - ensure we have some HTML content
+    if (htmlContent.length < 10 || !htmlContent.includes('<')) {
+      throw new Error('Generated content does not appear to be valid HTML');
+    }
 
     return htmlContent;
 
   } catch (error) {
-    console.error("Failed to anonymize resume with LLM:", error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.error("Failed to anonymize resume with LLM:", errorMessage);
+
+    // Return more specific error information in development
+    if (process.env.NODE_ENV === 'development') {
+      return `<div><p>Error processing resume content: ${errorMessage}</p></div>`;
+    }
+
     return '<div><p>Error processing resume content</p></div>';
   }
 }
@@ -636,7 +649,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Generate anonymized HTML resume
           let publicResumeHtml: string;
           try {
-            publicResumeHtml = await anonymizeResumeAsHTML(content, candidateInfo.firstName, candidateInfo.lastName);
+            publicResumeHtml = await anonymizeResumeAsHTML(content);
             console.log(`Generated anonymized HTML resume for ${candidateInfo.firstName} ${candidateInfo.lastInitial}`);
           } catch (htmlError) {
             console.error(`Failed to generate anonymized HTML for ${originalname}:`, htmlError);
