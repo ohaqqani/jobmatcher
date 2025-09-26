@@ -17,6 +17,7 @@ export const resumes = pgTable("resumes", {
   fileSize: integer("file_size").notNull(),
   fileType: text("file_type").notNull(),
   content: text("content").notNull(),
+  public_resume_html: text("public_resume_html"),
   uploadedAt: timestamp("uploaded_at").defaultNow(),
 });
 
@@ -25,6 +26,7 @@ export const candidates = pgTable("candidates", {
   resumeId: varchar("resume_id").references(() => resumes.id).notNull(),
   firstName: text("first_name").notNull(),
   lastName: text("last_name").notNull(),
+  lastInitial: text("last_initial").notNull(),
   email: text("email").notNull(),
   phone: text("phone"),
   skills: jsonb("skills").$type<string[]>().default([]),
@@ -54,12 +56,14 @@ export const insertResumeSchema = createInsertSchema(resumes).pick({
   fileSize: true,
   fileType: true,
   content: true,
+  public_resume_html: true,
 });
 
 export const insertCandidateSchema = createInsertSchema(candidates).pick({
   resumeId: true,
   firstName: true,
   lastName: true,
+  lastInitial: true,
   email: true,
   phone: true,
   skills: true,
@@ -74,6 +78,7 @@ export const insertMatchResultSchema = createInsertSchema(matchResults).pick({
   matchingSkills: true,
   analysis: true,
 });
+
 
 // Types
 export type JobDescription = typeof jobDescriptions.$inferSelect;
@@ -98,3 +103,12 @@ export type ProcessingStatus = {
   progress: number;
   error?: string;
 };
+
+export type PublicCandidateProfile = {
+  id: string;
+  firstName: string;
+  lastInitial: string;
+  skills: string[];
+  experience: string;
+  public_resume?: string; // HTML formatted resume as a string
+}

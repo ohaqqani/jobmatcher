@@ -82,6 +82,7 @@ export class MemStorage implements IStorage {
     const resume: Resume = {
       ...insertResume,
       id,
+      public_resume_html: insertResume.public_resume_html ?? null,
       uploadedAt: new Date(),
     };
     this.resumes.set(id, resume);

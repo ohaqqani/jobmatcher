@@ -1,4 +1,4 @@
-import { insertJobDescriptionSchema } from "@shared/schema";
+import { insertJobDescriptionSchema, PublicCandidateProfile } from "@shared/schema";
 import AdmZip from "adm-zip";
 import dotenv from 'dotenv';
 import type { Express } from "express";
@@ -83,6 +83,7 @@ async function extractTextFromFile(buffer: Buffer, mimetype: string): Promise<st
             max: 50 // Limit to first 50 pages to avoid memory issues
           });
           text = fallbackData.text || '';
+          
         }
         
       } catch (pdfError) {
@@ -184,6 +185,121 @@ Return a comprehensive but focused list of skills that candidates should have or
   } catch (error) {
     console.error("Failed to analyze job description:", error);
     return [];
+  }
+}
+
+// Helper function to clean HTML content for embedding
+function cleanHTMLContent(htmlContent: string): string {
+  // First, check if the content starts with a code block or is wrapped in quotes
+  let cleaned = htmlContent;
+
+  // Remove outer quotes if the entire content is wrapped in quotes
+  if ((cleaned.startsWith('"') && cleaned.endsWith('"')) || (cleaned.startsWith("'") && cleaned.endsWith("'"))) {
+    cleaned = cleaned.slice(1, -1);
+  }
+
+  // Remove escaped newlines and other escape characters more aggressively
+  cleaned = cleaned
+    .replace(/\\n/g, '')
+    .replace(/\\r/g, '')
+    .replace(/\\t/g, '')
+    .replace(/\\"/g, '"')
+    .replace(/\\'/g, "'")
+    .replace(/\\\\/g, '\\');
+
+  // Remove any remaining code block markers or backticks that might appear
+  cleaned = cleaned.replace(/```html/g, '').replace(/```/g, '');
+
+  // Remove DOCTYPE and document-level HTML tags if they somehow made it through
+  cleaned = cleaned
+    .replace(/<!DOCTYPE[^>]*>/gi, '')
+    .replace(/<html[^>]*>/gi, '')
+    .replace(/<\/html>/gi, '')
+    .replace(/<head[\s\S]*?<\/head>/gi, '')
+    .replace(/<body[^>]*>/gi, '')
+    .replace(/<\/body>/gi, '')
+    .replace(/<title[\s\S]*?<\/title>/gi, '');
+
+  // Remove literal \n characters that appear between HTML tags
+  cleaned = cleaned.replace(/>\s*\\n\s*</g, '><');
+
+  // Remove any remaining literal \n characters
+  cleaned = cleaned.replace(/\\n/g, '');
+
+  // Clean up extra whitespace between HTML tags while preserving content
+  cleaned = cleaned.replace(/>\s+</g, '><');
+
+  // Clean up extra whitespace but preserve proper line breaks in HTML
+  cleaned = cleaned.trim();
+
+  return cleaned;
+}
+
+// Helper function to anonymize resume and format as HTML using LLM
+async function anonymizeResumeAsHTML(resumePlainText: string, firstName: string, lastName: string): Promise<string> {
+  try {
+    const lastInitial = lastName.charAt(0).toUpperCase();
+    const anonymizedName = `${firstName} ${lastInitial}.`;
+
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o", // the newest OpenAI model is "gpt-4o" which was released May 13, 2024. do not change this unless explicitly requested by the user
+      messages: [
+        {
+          role: "system",
+          content: `You are an expert resume anonymization and HTML formatting specialist. Your task is to anonymize personally identifiable information from resumes and format them as clean, professional HTML.
+
+ANONYMIZATION REQUIREMENTS:
+- Remove ALL email addresses completely
+- Remove ALL phone numbers (any format, including international)
+- Remove ALL physical addresses (street addresses, cities, states, zip codes)
+- Replace the candidate's name with "${anonymizedName}" throughout the document
+- Preserve all professional experience, skills, education, and career achievements
+- Keep all dates, company names, job titles, and professional accomplishments
+
+HTML FORMATTING REQUIREMENTS:
+- Use semantic HTML structure with proper headings and content organization
+- Format resume sections (Experience, Education, Skills, Summary, etc.) with <h2> headings
+- Use <p> tags for paragraph content
+- Use <ul> and <li> tags for lists and bullet points
+- Use <h3> tags for job titles or subsection headings within main sections
+- DO NOT include any CSS classes, styles, or styling
+- Output clean, semantic HTML without any CSS or style attributes
+- Ensure proper HTML structure with opening and closing tags
+- Output ONLY the HTML content that goes inside a div - no DOCTYPE, html, head, body, or title tags
+- Return content that can be directly inserted into an existing HTML page
+- Do not escape characters or include literal \\n sequences
+- DO NOT include any \\n characters anywhere in your response
+- Write HTML tags continuously without line breaks or newline characters
+- Start directly with content elements like headings and paragraphs
+
+Return only clean HTML content as a single continuous string without any \\n characters, additional text, explanations, or document wrapper tags.`
+        },
+        {
+          role: "user",
+          content: `Please anonymize this resume and format it as clean HTML. The candidate's name should be replaced with "${anonymizedName}" wherever it appears.
+
+Resume content:
+${resumePlainText}`
+        }
+      ]
+    });
+
+    let htmlContent = response.choices[0].message.content || '<div><p>Resume content could not be processed</p></div>';
+
+    // Log the raw response for debugging
+    console.log('Raw LLM response:', JSON.stringify(htmlContent));
+
+    // Clean up the HTML content to ensure it's embeddable
+    htmlContent = cleanHTMLContent(htmlContent);
+
+    // Log the cleaned response
+    console.log('Cleaned HTML:', JSON.stringify(htmlContent));
+
+    return htmlContent;
+
+  } catch (error) {
+    console.error("Failed to anonymize resume with LLM:", error);
+    return '<div><p>Error processing resume content</p></div>';
   }
 }
 
@@ -507,21 +623,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             throw new Error(`Text extraction failed: ${extractError instanceof Error ? extractError.message : 'Unknown extraction error'}`);
           }
           
-          // Create resume record
-          let resume;
-          try {
-            resume = await storage.createResume({
-              fileName: originalname,
-              fileSize: buffer.length,
-              fileType: mimetype,
-              content,
-            });
-          } catch (resumeError) {
-            console.error(`Failed to create resume record for ${originalname}:`, resumeError);
-            throw new Error(`Database error: ${resumeError instanceof Error ? resumeError.message : 'Failed to save resume'}`);
-          }
-
-          // Extract candidate information
+          // Extract candidate information first
           let candidateInfo;
           try {
             candidateInfo = await extractCandidateInfo(content);
@@ -530,7 +632,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
             console.error(`Failed to extract candidate info from ${originalname}:`, aiError);
             throw new Error(`AI processing failed: ${aiError instanceof Error ? aiError.message : 'Failed to analyze resume content'}`);
           }
-          
+
+          // Generate anonymized HTML resume
+          let publicResumeHtml: string;
+          try {
+            publicResumeHtml = await anonymizeResumeAsHTML(content, candidateInfo.firstName, candidateInfo.lastName);
+            console.log(`Generated anonymized HTML resume for ${candidateInfo.firstName} ${candidateInfo.lastInitial}`);
+          } catch (htmlError) {
+            console.error(`Failed to generate anonymized HTML for ${originalname}:`, htmlError);
+            throw new Error(`HTML generation failed: ${htmlError instanceof Error ? htmlError.message : 'Failed to generate anonymized resume'}`);
+          }
+
+          // Create resume record with both original content and anonymized HTML
+          let resume;
+          try {
+            resume = await storage.createResume({
+              fileName: originalname,
+              fileSize: buffer.length,
+              fileType: mimetype,
+              content,
+              public_resume_html: publicResumeHtml,
+            });
+          } catch (resumeError) {
+            console.error(`Failed to create resume record for ${originalname}:`, resumeError);
+            throw new Error(`Database error: ${resumeError instanceof Error ? resumeError.message : 'Failed to save resume'}`);
+          }
+
           // Create candidate record
           let candidate;
           try {
@@ -549,6 +676,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             candidateInfo: candidateInfo,
             fileName: originalname,
             resumePlainText: content,
+            public_resume_html: publicResumeHtml,
             status: 'completed',
             fileIndex: index + 1
           };
@@ -690,12 +818,110 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Process matching for job description with provided public candidate profiles
+  app.post("/api/job-descriptions/:jobId/match/public", async (req, res) => {
+    try {
+      const { jobId } = req.params;
+      const { candidates }: { candidates: PublicCandidateProfile[] } = req.body;
+
+      if (!Array.isArray(candidates) || candidates.length === 0) {
+        return res.status(400).json({ message: "No candidate profiles provided" });
+      }
+
+      const jobDesc = await storage.getJobDescription(jobId);
+      if (!jobDesc) {
+        return res.status(404).json({ message: "Job description not found" });
+      }
+      
+      // Check if we already have matches for this job to prevent duplicate processing
+      const existingResults = await storage.getMatchResultsByJobId(jobId);
+      if (existingResults.length > 0) {
+        console.log(`Found ${existingResults.length} existing matches for job ${jobId}, returning existing results`);
+        return res.json({ matchResults: existingResults });
+      }
+      
+      console.log(`Processing candidate matching in parallel for ${candidates.length} candidates...`);
+
+      // Process all candidates concurrently
+      const candidatePromises = candidates.map(async (candidate) => {
+        try {
+          // Check if match already exists to prevent duplicates
+          const existingMatch = await storage.getMatchResult(candidate.id, jobId);
+          if (existingMatch) {
+            console.log(`Match already exists for candidate ${candidate.firstName} ${candidate.lastInitial} (${candidate.id}), skipping...`);
+            return existingMatch;
+          }
+
+          console.log(`Creating new match for candidate ${candidate.firstName} ${candidate.lastInitial} (${candidate.id})`);
+
+          
+          // Calculate match score with fuzzy matching
+          const matchData = await calculateMatchScore(
+            candidate.skills || [],
+            jobDesc.requiredSkills || [],
+            candidate.experience || undefined,
+          );
+
+          console.log(`Match score for ${candidate.firstName} ${candidate.lastInitial}: ${matchData.score}%`);
+          console.log(`Scorecard for ${candidate.firstName} ${candidate.lastInitial}:`, JSON.stringify(matchData.scorecard, null, 2));
+
+          // Create match result
+          const matchResult = await storage.createMatchResult({
+            jobDescriptionId: jobId,
+            candidateId: candidate.id,
+            matchScore: matchData.score,
+            scorecard: matchData.scorecard,
+            matchingSkills: matchData.matchingSkills,
+            analysis: matchData.analysis,
+          });
+
+          console.log(`Created match result for ${candidate.firstName} ${candidate.lastInitial}:`, JSON.stringify(matchResult, null, 2));
+
+          return matchResult;
+        } catch (error) {
+          console.error(`Failed to process match for candidate ${candidate.firstName} ${candidate.lastInitial}:`, error);
+          // Return a failed match result instead of throwing
+          return {
+            jobDescriptionId: jobId,
+            candidateId: candidate.id,
+            matchScore: 0,
+            matchingSkills: [],
+            analysis: `Failed to calculate match: ${error instanceof Error ? error.message : 'Unknown error'}`,
+            error: true
+          };
+        }
+      });
+
+      // Wait for all candidate matching to complete
+      const matchResults = await Promise.all(candidatePromises);
+
+      console.log(`Candidate matching complete. Processed ${matchResults.length} matches`);
+      res.json({ matchResults });
+    } catch (error) {
+      res.status(500).json({ message: error instanceof Error ? error.message : 'Unknown error' });
+    }
+  });
+
   // Get matching results for a job
   app.get("/api/job-descriptions/:jobId/results", async (req, res) => {
     try {
       const { jobId } = req.params;
       const results = await storage.getMatchResultsByJobId(jobId);
-      res.json(results);
+
+      // Transform results to include public_resume field for anonymized access
+      const transformedResults = results.map(result => ({
+        ...result,
+        publicCandidateProfile: {
+          id: result.id,
+          firstName: result.firstName,
+          lastInitial: result.lastInitial,
+          skills: result.skills || [],
+          experience: result.experience || '',
+          public_resume: result.resume.public_resume_html || ''
+        } as PublicCandidateProfile
+      }));
+
+      res.json(transformedResults);
     } catch (error) {
       res.status(500).json({ message: error instanceof Error ? error.message : 'Unknown error' });
     }
