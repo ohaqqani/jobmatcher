@@ -1,4 +1,4 @@
-import { insertJobDescriptionSchema, PublicCandidateProfile } from "@shared/schema";
+import { insertJobDescriptionSchema, PublicCandidateProfile } from "@shared/schemas";
 import AdmZip from "adm-zip";
 import dotenv from 'dotenv';
 import type { Express } from "express";

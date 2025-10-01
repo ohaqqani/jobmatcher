@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import type { CandidateWithMatch } from "@shared/schema";
+import type { CandidateWithMatch } from "@shared/schemas";
 import { Download, Filter } from "lucide-react";
 import CandidateRow from "./candidate-row";
 
@@ -14,14 +14,14 @@ interface CandidateTableProps {
   onPageChange: (page: number) => void;
 }
 
-export default function CandidateTable({ 
-  candidates, 
-  expandedCandidates, 
-  onRowToggle, 
-  onExport, 
-  totalPages, 
-  currentPage, 
-  onPageChange 
+export default function CandidateTable({
+  candidates,
+  expandedCandidates,
+  onRowToggle,
+  onExport,
+  totalPages,
+  currentPage,
+  onPageChange,
 }: CandidateTableProps) {
   return (
     <Card className="border border-slate-200 overflow-hidden shadow-lg hover:shadow-xl transition-shadow duration-300">
@@ -31,11 +31,19 @@ export default function CandidateTable({
             <h2 className="text-xl font-bold text-slate-900">Candidate Analysis Results</h2>
           </div>
           <div className="flex space-x-3">
-            <Button variant="outline" size="sm" className="border-slate-300 hover:bg-slate-50 hover:border-slate-400 transition-all duration-200 hover:text-slate-800">
+            <Button
+              variant="outline"
+              size="sm"
+              className="border-slate-300 hover:bg-slate-50 hover:border-slate-400 transition-all duration-200 hover:text-slate-800"
+            >
               <Filter className="mr-2 h-4 w-4" />
               Filter
             </Button>
-            <Button onClick={onExport} size="sm" className="bg-blue-600 hover:bg-blue-700 text-white shadow-sm hover:shadow-md transition-all duration-200">
+            <Button
+              onClick={onExport}
+              size="sm"
+              className="bg-blue-600 hover:bg-blue-700 text-white shadow-sm hover:shadow-md transition-all duration-200"
+            >
               <Download className="mr-2 h-4 w-4" />
               Export Results
             </Button>
@@ -66,9 +74,9 @@ export default function CandidateTable({
           </thead>
           <tbody className="bg-white">
             {candidates.map((candidate, index) => (
-              <CandidateRow 
-                key={`${candidate.id}-${index}`} 
-                candidate={candidate} 
+              <CandidateRow
+                key={`${candidate.id}-${index}`}
+                candidate={candidate}
                 index={index}
                 isExpanded={expandedCandidates.has(candidate.id)}
                 onToggle={() => onRowToggle(candidate.id)}
@@ -82,22 +90,23 @@ export default function CandidateTable({
       <div className="bg-slate-50/50 px-6 py-4 border-t border-slate-200">
         <div className="flex justify-between items-center">
           <div className="text-sm text-slate-600 font-medium">
-            Showing <span className="font-bold text-slate-900">1</span> to <span className="font-bold text-slate-900">{candidates.length}</span> of{' '}
+            Showing <span className="font-bold text-slate-900">1</span> to{" "}
+            <span className="font-bold text-slate-900">{candidates.length}</span> of{" "}
             <span className="font-bold text-slate-900">{candidates.length}</span> candidates
           </div>
           <div className="flex space-x-2">
-            <Button 
-              variant="outline" 
-              size="sm" 
+            <Button
+              variant="outline"
+              size="sm"
               disabled={currentPage === 1}
               onClick={() => onPageChange(currentPage - 1)}
               className="border-slate-300 hover:bg-slate-50 disabled:opacity-50 transition-all duration-200"
             >
               Previous
             </Button>
-            <Button 
-              variant="outline" 
-              size="sm" 
+            <Button
+              variant="outline"
+              size="sm"
               disabled={currentPage === totalPages}
               onClick={() => onPageChange(currentPage + 1)}
               className="border-slate-300 hover:bg-slate-50 disabled:opacity-50 transition-all duration-200"

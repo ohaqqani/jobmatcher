@@ -8,14 +8,15 @@ interface StatsCardsProps {
   processingTime: number;
 }
 
-export default function StatsCards({ 
-  totalCandidates, 
-  averageMatch, 
-  bestMatch, 
-  processingTime 
+export default function StatsCards({
+  totalCandidates,
+  averageMatch,
+  bestMatch,
+  processingTime,
 }: StatsCardsProps) {
   return (
-    <div className="grid grid-cols-1 md:grid-cols-4 gap-6">{/* removed mt-8 */}
+    <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+      {/* removed mt-8 */}
       <Card className="border border-gray-200">
         <CardContent className="p-6">
           <div className="flex items-center">
@@ -29,7 +30,7 @@ export default function StatsCards({
           </div>
         </CardContent>
       </Card>
-      
+
       <Card className="border border-gray-200">
         <CardContent className="p-6">
           <div className="flex items-center">
@@ -43,7 +44,7 @@ export default function StatsCards({
           </div>
         </CardContent>
       </Card>
-      
+
       <Card className="border border-gray-200">
         <CardContent className="p-6">
           <div className="flex items-center">
@@ -57,7 +58,7 @@ export default function StatsCards({
           </div>
         </CardContent>
       </Card>
-      
+
       <Card className="border border-gray-200">
         <CardContent className="p-6">
           <div className="flex items-center">

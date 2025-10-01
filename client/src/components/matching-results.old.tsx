@@ -1,6 +1,6 @@
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import type { CandidateWithMatch } from "@shared/schema";
+import type { CandidateWithMatch } from "@shared/schemas";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import CandidateTable from "./candidate-table";
