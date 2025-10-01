@@ -1,7 +1,7 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import type { CandidateWithMatch } from "@shared/schema";
+import type { CandidateWithMatch } from "@shared/schemas";
 import { BarChart3, TrendingUp } from "lucide-react";
 
 interface CandidateRowProps {
@@ -11,17 +11,22 @@ interface CandidateRowProps {
   onToggle: () => void;
 }
 
-export default function CandidateRow({ candidate, index, isExpanded, onToggle }: CandidateRowProps) {
+export default function CandidateRow({
+  candidate,
+  index,
+  isExpanded,
+  onToggle,
+}: CandidateRowProps) {
   const getMatchColor = (score: number) => {
-    if (score >= 80) return 'bg-accent';
-    if (score >= 60) return 'bg-warning';
-    return 'bg-destructive';
+    if (score >= 80) return "bg-accent";
+    if (score >= 60) return "bg-warning";
+    return "bg-destructive";
   };
 
   const getMatchBadge = (score: number) => {
-    if (score >= 80) return { text: 'Excellent', variant: 'default' as const };
-    if (score >= 60) return { text: 'Good', variant: 'secondary' as const };
-    return { text: 'Needs Review', variant: 'destructive' as const };
+    if (score >= 80) return { text: "Excellent", variant: "default" as const };
+    if (score >= 60) return { text: "Good", variant: "secondary" as const };
+    return { text: "Needs Review", variant: "destructive" as const };
   };
 
   // Handle missing matchResult
@@ -46,14 +51,17 @@ export default function CandidateRow({ candidate, index, isExpanded, onToggle }:
                   {candidate.email}
                 </div>
               </TooltipTrigger>
-              <TooltipContent side="top" className="max-w-xs bg-slate-800 text-white border-slate-700">
+              <TooltipContent
+                side="top"
+                className="max-w-xs bg-slate-800 text-white border-slate-700"
+              >
                 <div>
                   <p>{candidate.email}</p>
                 </div>
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
-          <div className="text-sm text-slate-500">{candidate.phone || 'N/A'}</div>
+          <div className="text-sm text-slate-500">{candidate.phone || "N/A"}</div>
         </td>
 
         {/* Experience & Key Skills Column */}
@@ -65,9 +73,7 @@ export default function CandidateRow({ candidate, index, isExpanded, onToggle }:
                 <div className="text-xs font-semibold text-slate-600 uppercase tracking-wider mb-2">
                   Experience
                 </div>
-                <div className="text-sm text-slate-700 leading-relaxed">
-                  {candidate.experience}
-                </div>
+                <div className="text-sm text-slate-700 leading-relaxed">{candidate.experience}</div>
               </div>
             )}
 
@@ -94,11 +100,16 @@ export default function CandidateRow({ candidate, index, isExpanded, onToggle }:
                             +{candidate.skills.length - 6} more
                           </span>
                         </TooltipTrigger>
-                        <TooltipContent side="top" className="max-w-xs bg-slate-800 text-white border-slate-700">
+                        <TooltipContent
+                          side="top"
+                          className="max-w-xs bg-slate-800 text-white border-slate-700"
+                        >
                           <div className="space-y-1">
                             <p className="font-semibold text-xs mb-2">Additional Skills:</p>
                             {candidate.skills.slice(6).map((skill: string, index: number) => (
-                              <div key={index} className="text-xs">• {skill}</div>
+                              <div key={index} className="text-xs">
+                                • {skill}
+                              </div>
                             ))}
                           </div>
                         </TooltipContent>
@@ -107,9 +118,7 @@ export default function CandidateRow({ candidate, index, isExpanded, onToggle }:
                   )}
                 </div>
               ) : (
-                <div className="text-sm text-slate-400 italic">
-                  No skills listed
-                </div>
+                <div className="text-sm text-slate-400 italic">No skills listed</div>
               )}
             </div>
           </div>
@@ -119,7 +128,9 @@ export default function CandidateRow({ candidate, index, isExpanded, onToggle }:
         <td className="px-6 py-4 w-40">
           <div className="space-y-4">
             <div className="flex justify-center">
-              <Badge variant={badge.variant} className="shadow-sm font-semibold">{badge.text}</Badge>
+              <Badge variant={badge.variant} className="shadow-sm font-semibold">
+                {badge.text}
+              </Badge>
             </div>
             <div className="text-center">
               <div className="text-3xl font-bold text-slate-900 mb-2">{matchScore}%</div>
@@ -137,7 +148,7 @@ export default function CandidateRow({ candidate, index, isExpanded, onToggle }:
                 onClick={onToggle}
                 className="text-xs font-medium border-slate-300 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700 transition-all duration-200"
               >
-                {isExpanded ? 'Hide Analysis' : 'View Analysis'}
+                {isExpanded ? "Hide Analysis" : "View Analysis"}
               </Button>
             </div>
           </div>
@@ -158,47 +169,62 @@ export default function CandidateRow({ candidate, index, isExpanded, onToggle }:
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b-2 border-slate-200 bg-slate-50/50">
-                        <th className="text-left py-3 px-4 font-semibold text-slate-700">Category</th>
-                        <th className="text-center py-3 px-4 font-semibold text-slate-700">Score</th>
-                        <th className="text-center py-3 px-4 font-semibold text-slate-700">Weight</th>
-                        <th className="text-center py-3 px-4 font-semibold text-slate-700">Weighted Score</th>
-                        <th className="text-left py-3 px-4 font-semibold text-slate-700">Comments</th>
+                        <th className="text-left py-3 px-4 font-semibold text-slate-700">
+                          Category
+                        </th>
+                        <th className="text-center py-3 px-4 font-semibold text-slate-700">
+                          Score
+                        </th>
+                        <th className="text-center py-3 px-4 font-semibold text-slate-700">
+                          Weight
+                        </th>
+                        <th className="text-center py-3 px-4 font-semibold text-slate-700">
+                          Weighted Score
+                        </th>
+                        <th className="text-left py-3 px-4 font-semibold text-slate-700">
+                          Comments
+                        </th>
                       </tr>
                     </thead>
                     <tbody>
-                      {candidate.matchResult?.scorecard && Object.entries(candidate.matchResult.scorecard).map(([category, data], index) => {
+                      {candidate.matchResult?.scorecard &&
+                        Object.entries(candidate.matchResult.scorecard).map(
+                          ([category, data], index) => {
+                            // Now that the schema is correct, we can access the properties directly
+                            const score = data.score || 0;
+                            const weight = data.weight || 0;
+                            const comments = data.comments || "No comments available";
 
-                        let score: number;
-                        let weight: number;
-                        let comments: string;
+                            const weightedScore = Math.round((score * weight) / 100);
 
-                        // Now that the schema is correct, we can access the properties directly
-                        score = data.score || 0;
-                        weight = data.weight || 0;
-                        comments = data.comments || 'No comments available';
-
-                        const weightedScore = Math.round((score * weight) / 100);
-                        
-                        return (
-                          <tr key={index} className="border-b border-slate-100 hover:bg-blue-50/50 transition-colors">
-                            <td className="py-3 px-4 font-semibold text-slate-900">{category}</td>
-                            <td className="text-center py-3 px-4">
-                              <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-800 border border-blue-200">
-                                {Math.round(score)}/100
-                              </span>
-                            </td>
-                            <td className="text-center py-3 px-4 text-slate-600 font-medium">{Math.round(weight)}%</td>
-                            <td className="text-center py-3 px-4">
-                              <span className="font-bold text-slate-900">
-                                {weightedScore}/100
-                              </span>
-                            </td>
-                            <td className="py-3 px-4 text-sm text-slate-600 leading-relaxed">
-                              {comments}
-                            </td>
-                          </tr>
-                        );
-                      })}
+                            return (
+                              <tr
+                                key={index}
+                                className="border-b border-slate-100 hover:bg-blue-50/50 transition-colors"
+                              >
+                                <td className="py-3 px-4 font-semibold text-slate-900">
+                                  {category}
+                                </td>
+                                <td className="text-center py-3 px-4">
+                                  <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-800 border border-blue-200">
+                                    {Math.round(score)}/100
+                                  </span>
+                                </td>
+                                <td className="text-center py-3 px-4 text-slate-600 font-medium">
+                                  {Math.round(weight)}%
+                                </td>
+                                <td className="text-center py-3 px-4">
+                                  <span className="font-bold text-slate-900">
+                                    {weightedScore}/100
+                                  </span>
+                                </td>
+                                <td className="py-3 px-4 text-sm text-slate-600 leading-relaxed">
+                                  {comments}
+                                </td>
+                              </tr>
+                            );
+                          }
+                        )}
                     </tbody>
                   </table>
                 </div>
@@ -210,10 +236,10 @@ export default function CandidateRow({ candidate, index, isExpanded, onToggle }:
                   <TrendingUp className="h-5 w-5 mr-3 text-emerald-600" />
                   Analysis
                 </h4>
-                <div 
+                <div
                   className="text-slate-700 leading-relaxed prose prose-sm max-w-none prose-headings:text-slate-900 prose-strong:text-slate-900 prose-blue"
-                  dangerouslySetInnerHTML={{ 
-                    __html: candidate.matchResult?.analysis || 'No analysis available' 
+                  dangerouslySetInnerHTML={{
+                    __html: candidate.matchResult?.analysis || "No analysis available",
                   }}
                 />
               </div>

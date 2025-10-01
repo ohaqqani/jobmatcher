@@ -1,7 +1,7 @@
-import JobDescriptionInput from "@/components/job-description-input";
-import MatchingResults from "@/components/matching-results";
+import JobDescriptionForm from "@/features/jobs/components/JobDescriptionForm";
+import MatchingResults from "@/features/matching/components/MatchingResults";
 import ProcessingStatus from "@/components/processing-status";
-import ResumeUpload from "@/components/resume-upload";
+import ResumeUpload from "@/features/candidates/components/ResumeUpload";
 import { Button } from "@/components/ui/button";
 import { HelpCircle, Search, User } from "lucide-react";
 import { useState } from "react";
@@ -38,7 +38,7 @@ export default function Home() {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Top Section: Job Description and Resume Upload */}
         <div className="grid grid-cols-1 gap-8 mb-8">
-          <JobDescriptionInput 
+          <JobDescriptionForm
             onJobCreated={setCurrentJobId}
             currentJobId={currentJobId}
             setIsAnalyzingComplete={setIsAnalyzingComplete}
@@ -48,20 +48,16 @@ export default function Home() {
               onFilesUploaded={setUploadedResumes}
               onProcessingUpdate={setProcessingFiles}
               setIsProcessing={setIsProcessing}
-            />)}
+            />
+          )}
         </div>
 
         {/* Processing Status */}
-        {isProcessing && processingFiles.length > 0 && (
-          <ProcessingStatus files={processingFiles} />
-        )}
+        {isProcessing && processingFiles.length > 0 && <ProcessingStatus files={processingFiles} />}
 
         {/* Results Section */}
         {currentJobId && uploadedResumes.length > 0 && (
-          <MatchingResults 
-            jobId={currentJobId}
-            resumeIds={uploadedResumes}
-          />
+          <MatchingResults jobId={currentJobId} resumeIds={uploadedResumes} />
         )}
 
         {/* Empty State */}
@@ -72,10 +68,9 @@ export default function Home() {
               Get started with resume matching
             </h3>
             <p className="text-gray-500 max-w-md mx-auto">
-              {!currentJobId 
+              {!currentJobId
                 ? "Enter a job description and upload resumes to begin analyzing candidates."
-                : "Upload resumes to start matching candidates against your job requirements."
-              }
+                : "Upload resumes to start matching candidates against your job requirements."}
             </p>
           </div>
         )}

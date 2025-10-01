@@ -1,11 +1,10 @@
 import express, { NextFunction, type Request, Response } from "express";
-import { registerRoutes } from "./routes";
+import { registerRoutes } from "./routes/index";
 import { log, serveStatic, setupVite } from "./vite";
 
 const app = express();
-app.use(express.json({ limit: '600mb' }));
-app.use(express.urlencoded({ limit: '600mb', extended: true }));
-
+app.use(express.json({ limit: "600mb" }));
+app.use(express.urlencoded({ limit: "600mb", extended: true }));
 
 app.use((req, res, next) => {
   const start = Date.now();
@@ -39,8 +38,8 @@ app.use((req, res, next) => {
 
 (async () => {
   // Add health check endpoint
-  app.get('/health', (_req, res) => {
-    res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
+  app.get("/health", (_req, res) => {
+    res.status(200).json({ status: "ok", timestamp: new Date().toISOString() });
   });
 
   const server = await registerRoutes(app);
@@ -49,8 +48,8 @@ app.use((req, res, next) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
 
-    console.error('Server error:', err);
-    
+    console.error("Server error:", err);
+
     if (!res.headersSent) {
       res.status(status).json({ message });
     }
@@ -66,13 +65,13 @@ app.use((req, res, next) => {
   }
 
   // Railway provides PORT environment variable, fallback to 3000 for local development
-  const port = parseInt(process.env.PORT || '3000', 10);
-  
+  const port = parseInt(process.env.PORT || "3000", 10);
+
   server.listen(port, "0.0.0.0", () => {
-    console.log(`Server running on port ${port} in ${process.env.NODE_ENV || 'development'} mode`);
-    log(`Server running on port ${port} in ${process.env.NODE_ENV || 'development'} mode`);
+    console.log(`Server running on port ${port} in ${process.env.NODE_ENV || "development"} mode`);
+    log(`Server running on port ${port} in ${process.env.NODE_ENV || "development"} mode`);
   });
 })().catch((error) => {
-  console.error('Failed to start server:', error);
+  console.error("Failed to start server:", error);
   process.exit(1);
 });

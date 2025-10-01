@@ -5,8 +5,6 @@ interface LoadingStateProps {
   isMatching: boolean;
 }
 
-interface EmptyStateProps {}
-
 export function LoadingState({ isMatching }: LoadingStateProps) {
   return (
     <Card className="border border-gray-200">
@@ -23,7 +21,7 @@ export function LoadingState({ isMatching }: LoadingStateProps) {
   );
 }
 
-export function EmptyState({}: EmptyStateProps) {
+export function EmptyState() {
   return (
     <Card className="border border-gray-200">
       <CardContent className="p-8 text-center">

@@ -1,5 +1,5 @@
-import { 
-  type JobDescription, 
+import {
+  type JobDescription,
   type InsertJobDescription,
   type Resume,
   type InsertResume,
@@ -7,8 +7,8 @@ import {
   type InsertCandidate,
   type MatchResult,
   type InsertMatchResult,
-  type CandidateWithMatch
-} from "@shared/schema";
+  type CandidateWithMatch,
+} from "@shared/schemas";
 import { randomUUID } from "crypto";
 
 export interface IStorage {
@@ -66,7 +66,7 @@ export class MemStorage implements IStorage {
   async analyzeJobDescription(id: string, requiredSkills: string[]): Promise<JobDescription> {
     const jobDesc = this.jobDescriptions.get(id);
     if (!jobDesc) throw new Error("Job description not found");
-    
+
     const updated: JobDescription = {
       ...jobDesc,
       requiredSkills,
@@ -94,7 +94,7 @@ export class MemStorage implements IStorage {
   }
 
   async getResumesByIds(ids: string[]): Promise<Resume[]> {
-    return ids.map(id => this.resumes.get(id)).filter(Boolean) as Resume[];
+    return ids.map((id) => this.resumes.get(id)).filter(Boolean) as Resume[];
   }
 
   // Candidate methods
@@ -105,7 +105,7 @@ export class MemStorage implements IStorage {
       id,
       phone: insertCandidate.phone ?? null,
       experience: insertCandidate.experience ?? null,
-      skills: Array.isArray(insertCandidate.skills) ? insertCandidate.skills as string[] : null,
+      skills: Array.isArray(insertCandidate.skills) ? (insertCandidate.skills as string[]) : null,
       extractedAt: new Date(),
     };
     this.candidates.set(id, candidate);
@@ -117,8 +117,8 @@ export class MemStorage implements IStorage {
   }
 
   async getCandidatesByResumeIds(resumeIds: string[]): Promise<Candidate[]> {
-    return Array.from(this.candidates.values()).filter(
-      candidate => resumeIds.includes(candidate.resumeId)
+    return Array.from(this.candidates.values()).filter((candidate) =>
+      resumeIds.includes(candidate.resumeId)
     );
   }
 
@@ -129,7 +129,9 @@ export class MemStorage implements IStorage {
       ...insertMatchResult,
       id,
       scorecard: insertMatchResult.scorecard ?? {},
-      matchingSkills: Array.isArray(insertMatchResult.matchingSkills) ? insertMatchResult.matchingSkills as string[] : null,
+      matchingSkills: Array.isArray(insertMatchResult.matchingSkills)
+        ? (insertMatchResult.matchingSkills as string[])
+        : null,
       analysis: insertMatchResult.analysis ?? null,
       createdAt: new Date(),
     };
@@ -139,11 +141,11 @@ export class MemStorage implements IStorage {
 
   async getMatchResultsByJobId(jobId: string): Promise<CandidateWithMatch[]> {
     const matchResults = Array.from(this.matchResults.values()).filter(
-      result => result.jobDescriptionId === jobId
+      (result) => result.jobDescriptionId === jobId
     );
 
     const candidatesWithMatch: CandidateWithMatch[] = [];
-    
+
     for (const matchResult of matchResults) {
       const candidate = this.candidates.get(matchResult.candidateId);
       if (candidate) {
@@ -163,7 +165,7 @@ export class MemStorage implements IStorage {
 
   async getMatchResult(candidateId: string, jobId: string): Promise<MatchResult | undefined> {
     return Array.from(this.matchResults.values()).find(
-      result => result.candidateId === candidateId && result.jobDescriptionId === jobId
+      (result) => result.candidateId === candidateId && result.jobDescriptionId === jobId
     );
   }
 }
