@@ -283,7 +283,7 @@ ${resumePlainText}`,
         },
       ],
       // Add timeout and other safety parameters
-      max_completion_tokens: 8000,
+      max_completion_tokens: 5000,
     });
 
     const rawContent = response.choices[0]?.message?.content;
