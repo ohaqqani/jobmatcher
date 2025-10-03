@@ -15,15 +15,7 @@ export async function calculateMatchScore(
   analysis: string;
 }> {
   try {
-    const response = await openai.chat.completions.create({
-      model: "gpt-5",
-      reasoning: { effort: "low" },
-      text: { verbosity: "low" },
-      // @ts-expect-error - GPT-5 parameters not yet in SDK types
-      messages: [
-        {
-          role: "system",
-          content: `You are an expert talent assessment specialist whose job is to predict how well a candidate will perform in a specific target role based on their experience, skills, and competencies.
+    const inputPrompt = `You are an expert talent assessment specialist whose job is to predict how well a candidate will perform in a specific target role based on their experience, skills, and competencies.
 
 ## ROLE MATCHING CRITERIA
 (Tailor the specifics below to the role in question)
@@ -89,11 +81,11 @@ Return JSON with:
   },
   "matchingSkills": ["Project Management", "Communication", "CRM Systems"],
   "analysis": "<h1>Summary of Match</h1><p><strong>Moderate Fit</strong>: The candidate possesses a robust background in executive support and office management but lacks specific experience in the hospitality or retail industries and explicit bookkeeping experience.</p><h1>Key Matching Points</h1><ul><li><strong>Administrative Support</strong>: Extensive experience supporting executive operations, managing calendars, and scheduling, which aligns well with the core administrative requirements of the role.</li><li><strong>Time and Task Management</strong>: Demonstrated ability in managing fast-paced environments with attention to detail and proactive communication skills.</li><li><strong>Problem-solving and Coordination</strong>: Expertise in cross-functional coordination and problem-solving, vital for overseeing office operations.</li></ul><h1>Gaps &amp; Risks</h1><ul><li><strong>Bookkeeping and Financial Knowledge</strong>: Limited direct experience with bookkeeping, accounts reconciliation, and use of specific accounting tools like QuickBooks or Xero.</li><li><strong>Industry Experience</strong>: Lack of specific experience in the hospitality or retail industry could be a challenge, particularly in understanding franchise operations.</li></ul><h1>Recommendation</h1><p><strong>Conditional Proceed</strong>: While the candidate shows strong potential in handling core functions, they would benefit significantly from training in bookkeeping and gaining awareness of the specific industry context. Consideration should be given if supplementary training can be provided in accounting and industry-specific operations.</p>"
-  `,
-        },
-        {
-          role: "user",
-          content: `CANDIDATE PROFILE:
+}
+
+---
+
+CANDIDATE PROFILE:
 Skills: ${JSON.stringify(candidateSkills)}
 Experience Summary: ${candidateExperience || "Not provided"}
 
@@ -102,13 +94,17 @@ Required Skills: ${JSON.stringify(jobRequiredSkills)}
 
 ${resumeContent ? `ADDITIONAL CONTEXT FROM RESUME:\n${resumeContent}...` : ""}
 
-Please assess this candidate's potential for success in this role using fuzzy matching and predictive analysis. Return your assessment in JSON format.`,
-        },
-      ],
-      response_format: { type: "json_object" },
+Please assess this candidate's potential for success in this role using fuzzy matching and predictive analysis. Return your assessment in JSON format.`;
+
+    // @ts-expect-error - GPT-5 Responses API parameters not yet in SDK types
+    const response = await openai.responses.create({
+      model: "gpt-5",
+      reasoning: { effort: "low" },
+      text: { verbosity: "low" },
+      input: inputPrompt,
     });
 
-    const result = JSON.parse(response.choices[0].message.content || "{}");
+    const result = JSON.parse(response.output_text || "{}");
 
     console.log("Raw AI response result:", JSON.stringify(result, null, 2));
     console.log("Extracted scorecard:", JSON.stringify(result.scorecard, null, 2));

@@ -113,15 +113,7 @@ export async function extractCandidateInfo(resumeText: string): Promise<{
   experience?: string;
 }> {
   try {
-    const response = await openai.chat.completions.create({
-      model: "gpt-5",
-      reasoning: { effort: "low" },
-      text: { verbosity: "low" },
-      // @ts-expect-error - GPT-5 parameters not yet in SDK types
-      messages: [
-        {
-          role: "system",
-          content: `You are an expert resume parser and skills analyst. Extract comprehensive candidate information optimized for job matching.
+    const inputPrompt = `You are an expert resume parser and skills analyst. Extract comprehensive candidate information optimized for job matching.
 
 CANDIDATE INFO EXTRACTION GUIDELINES:
 - Extract the candidate's first name, last name, last initial, email address, and phone number
@@ -154,17 +146,23 @@ REQUIRED JSON FORMAT:
   "experience": "text summary of experience"
 }
 
-Ensure all fields use these exact field names and data types.`,
-        },
-        {
-          role: "user",
-          content: `Parse this resume and extract comprehensive candidate information. Return the data in JSON format:\n\n${resumeText}`,
-        },
-      ],
-      response_format: { type: "json_object" },
+Ensure all fields use these exact field names and data types.
+
+---
+
+Parse this resume and extract comprehensive candidate information. Return the data in JSON format:
+
+${resumeText}`;
+
+    // @ts-expect-error - GPT-5 Responses API parameters not yet in SDK types
+    const response = await openai.responses.create({
+      model: "gpt-5",
+      reasoning: { effort: "low" },
+      text: { verbosity: "low" },
+      input: inputPrompt,
     });
 
-    const result = JSON.parse(response.choices[0].message.content || "{}");
+    const result = JSON.parse(response.output_text || "{}");
 
     // Log the parsed result for debugging
     console.log("Parsed candidate data:", JSON.stringify(result, null, 2));
@@ -243,15 +241,7 @@ export async function anonymizeResumeAsHTML(resumePlainText: string): Promise<st
   }
 
   try {
-    const response = await openai.chat.completions.create({
-      model: "gpt-5",
-      reasoning: { effort: "low" },
-      text: { verbosity: "low" },
-      // @ts-expect-error - GPT-5 parameters not yet in SDK types
-      messages: [
-        {
-          role: "system",
-          content: `You are an expert resume anonymization and HTML formatting specialist. Your task is to anonymize personally identifiable information from resumes and format them as clean, professional HTML.
+    const inputPrompt = `You are an expert resume anonymization and HTML formatting specialist. Your task is to anonymize personally identifiable information from resumes and format them as clean, professional HTML.
 
 ANONYMIZATION REQUIREMENTS:
 - Remove ALL email addresses completely
@@ -278,21 +268,25 @@ HTML FORMATTING REQUIREMENTS:
 - Write HTML tags continuously without line breaks or newline characters
 - Start directly with content elements like headings and paragraphs
 
-Return only clean HTML content as a single continuous string without any \\n characters, additional text, explanations, or document wrapper tags.`,
-        },
-        {
-          role: "user",
-          content: `Please anonymize this resume and format it as clean HTML. Remove the candidate's name completely from the document.
+Return only clean HTML content as a single continuous string without any \\n characters, additional text, explanations, or document wrapper tags.
+
+---
+
+Please anonymize this resume and format it as clean HTML. Remove the candidate's name completely from the document.
 
 Resume content:
-${resumePlainText}`,
-        },
-      ],
-      // Add timeout and other safety parameters
-      max_completion_tokens: 5000,
+${resumePlainText}`;
+
+    // @ts-expect-error - GPT-5 Responses API parameters not yet in SDK types
+    const response = await openai.responses.create({
+      model: "gpt-5",
+      reasoning: { effort: "low" },
+      text: { verbosity: "low" },
+      max_output_tokens: 5000,
+      input: inputPrompt,
     });
 
-    const rawContent = response.choices[0]?.message?.content;
+    const rawContent = response.output_text;
     if (!rawContent) {
       throw new Error("No content returned from OpenAI API");
     }
