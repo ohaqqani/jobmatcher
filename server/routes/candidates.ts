@@ -1,12 +1,12 @@
 import { Router } from "express";
+import {
+  anonymizeResumeAsHTML,
+  extractCandidateInfo,
+  extractFilesFromZip,
+  extractTextFromFile,
+} from "../services/candidates";
 import { upload } from "../services/lib/fileUpload";
 import { storage } from "../storage";
-import {
-  extractTextFromFile,
-  extractCandidateInfo,
-  anonymizeResumeAsHTML,
-  extractFilesFromZip,
-} from "../services/candidates";
 
 const router = Router();
 
@@ -126,7 +126,7 @@ router.post("/api/resumes/upload", upload.array("file", 100), async (req, res) =
             fileSize: buffer.length,
             fileType: mimetype,
             content,
-            public_resume_html: publicResumeHtml,
+            publicResumeHtml: publicResumeHtml,
           });
         } catch (resumeError) {
           console.error(`Failed to create resume record for ${originalname}:`, resumeError);
@@ -155,7 +155,7 @@ router.post("/api/resumes/upload", upload.array("file", 100), async (req, res) =
           candidateInfo: candidateInfo,
           fileName: originalname,
           resumePlainText: content,
-          public_resume_html: publicResumeHtml,
+          publicResumeHtml: publicResumeHtml,
           status: "completed",
           fileIndex: index + 1,
         };

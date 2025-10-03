@@ -11,7 +11,7 @@ export const resumes = pgTable("resumes", {
   fileSize: integer("file_size").notNull(),
   fileType: text("file_type").notNull(),
   content: text("content").notNull(),
-  public_resume_html: text("public_resume_html"),
+  publicResumeHtml: text("publicResumeHtml"),
   uploadedAt: timestamp("uploaded_at").defaultNow(),
 });
 
@@ -37,7 +37,7 @@ export const insertResumeSchema = createInsertSchema(resumes).pick({
   fileSize: true,
   fileType: true,
   content: true,
-  public_resume_html: true,
+  publicResumeHtml: true,
 });
 
 export const insertCandidateSchema = createInsertSchema(candidates).pick({

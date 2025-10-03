@@ -664,7 +664,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               fileSize: buffer.length,
               fileType: mimetype,
               content,
-              public_resume_html: publicResumeHtml,
+              publicResumeHtml: publicResumeHtml,
             });
           } catch (resumeError) {
             console.error(`Failed to create resume record for ${originalname}:`, resumeError);
@@ -689,7 +689,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             candidateInfo: candidateInfo,
             fileName: originalname,
             resumePlainText: content,
-            public_resume_html: publicResumeHtml,
+            publicResumeHtml: publicResumeHtml,
             status: 'completed',
             fileIndex: index + 1
           };
@@ -921,7 +921,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { jobId } = req.params;
       const results = await storage.getMatchResultsByJobId(jobId);
 
-      // Transform results to include public_resume field for anonymized access
+      // Transform results to include publicResumeHtml field for anonymized access
       const transformedResults = results.map(result => ({
         ...result,
         publicCandidateProfile: {
@@ -930,7 +930,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           lastInitial: result.lastInitial,
           skills: result.skills || [],
           experience: result.experience || '',
-          public_resume: result.resume.public_resume_html || ''
+          publicResumeHtml: result.resume.publicResumeHtml || ''
         } as PublicCandidateProfile
       }));
 

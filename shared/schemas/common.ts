@@ -1,5 +1,4 @@
-import type { Candidate } from "./candidates";
-import type { Resume } from "./candidates";
+import type { Candidate, Resume } from "./candidates";
 import type { MatchResult } from "./matching";
 
 export type CandidateWithMatch = Candidate & {
@@ -21,5 +20,5 @@ export type PublicCandidateProfile = {
   lastInitial: string;
   skills: string[];
   experience: string;
-  public_resume?: string; // HTML formatted resume as a string
+  publicResumeHtml?: string; // HTML formatted resume as a string
 };

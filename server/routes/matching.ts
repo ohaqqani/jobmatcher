@@ -1,7 +1,7 @@
-import { Router } from "express";
 import { PublicCandidateProfile } from "@shared/schemas";
-import { storage } from "../storage";
+import { Router } from "express";
 import { calculateMatchScore } from "../services/matching";
+import { storage } from "../storage";
 
 const router = Router();
 
@@ -162,7 +162,8 @@ router.post("/api/job-descriptions/:jobId/match/public", async (req, res) => {
         const matchData = await calculateMatchScore(
           candidate.skills || [],
           jobDesc.requiredSkills || [],
-          candidate.experience || undefined
+          candidate.experience || undefined,
+          candidate.publicResumeHtml || undefined
         );
 
         console.log(
@@ -224,7 +225,7 @@ router.get("/api/job-descriptions/:jobId/results", async (req, res) => {
     const { jobId } = req.params;
     const results = await storage.getMatchResultsByJobId(jobId);
 
-    // Transform results to include public_resume field for anonymized access
+    // Transform results to include publicResumeHtml field for anonymized access
     const transformedResults = results.map((result) => ({
       ...result,
       publicCandidateProfile: {
@@ -233,7 +234,7 @@ router.get("/api/job-descriptions/:jobId/results", async (req, res) => {
         lastInitial: result.lastInitial,
         skills: result.skills || [],
         experience: result.experience || "",
-        public_resume: result.resume.public_resume_html || "",
+        publicResumeHtml: result.resume.publicResumeHtml || "",
       } as PublicCandidateProfile,
     }));
 

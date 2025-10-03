@@ -1,13 +1,13 @@
 import {
-  type JobDescription,
-  type InsertJobDescription,
-  type Resume,
-  type InsertResume,
   type Candidate,
-  type InsertCandidate,
-  type MatchResult,
-  type InsertMatchResult,
   type CandidateWithMatch,
+  type InsertCandidate,
+  type InsertJobDescription,
+  type InsertMatchResult,
+  type InsertResume,
+  type JobDescription,
+  type MatchResult,
+  type Resume,
 } from "@shared/schemas";
 import { randomUUID } from "crypto";
 
@@ -82,7 +82,7 @@ export class MemStorage implements IStorage {
     const resume: Resume = {
       ...insertResume,
       id,
-      public_resume_html: insertResume.public_resume_html ?? null,
+      publicResumeHtml: insertResume.publicResumeHtml ?? null,
       uploadedAt: new Date(),
     };
     this.resumes.set(id, resume);
