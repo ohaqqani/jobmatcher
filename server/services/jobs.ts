@@ -9,7 +9,7 @@ export async function analyzeJobDescriptionWithAI(
 ): Promise<string[]> {
   try {
     const response = await openai.chat.completions.create({
-      model: "gpt-4o", // the newest OpenAI model is "gpt-4o" which was released May 13, 2024. do not change this unless explicitly requested by the user
+      model: "gpt-5",
       messages: [
         {
           role: "system",

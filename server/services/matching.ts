@@ -16,7 +16,7 @@ export async function calculateMatchScore(
 }> {
   try {
     const response = await openai.chat.completions.create({
-      model: "gpt-4o", // the newest OpenAI model is "gpt-4o" which was released May 13, 2024. do not change this unless explicitly requested by the user
+      model: "gpt-5",
       messages: [
         {
           role: "system",
@@ -97,7 +97,7 @@ Experience Summary: ${candidateExperience || "Not provided"}
 JOB REQUIREMENTS:
 Required Skills: ${JSON.stringify(jobRequiredSkills)}
 
-${resumeContent ? `ADDITIONAL CONTEXT FROM RESUME:\n${resumeContent.substring(0, 1000)}...` : ""}
+${resumeContent ? `ADDITIONAL CONTEXT FROM RESUME:\n${resumeContent}...` : ""}
 
 Please assess this candidate's potential for success in this role using fuzzy matching and predictive analysis. Return your assessment in JSON format.`,
         },
