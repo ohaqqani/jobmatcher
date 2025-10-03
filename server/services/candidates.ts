@@ -284,7 +284,6 @@ ${resumePlainText}`,
       ],
       // Add timeout and other safety parameters
       max_completion_tokens: 8000,
-      temperature: 0.1, // Lower temperature for more consistent output
     });
 
     const rawContent = response.choices[0]?.message?.content;
