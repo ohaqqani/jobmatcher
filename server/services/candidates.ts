@@ -283,7 +283,7 @@ ${resumePlainText}`,
         },
       ],
       // Add timeout and other safety parameters
-      max_tokens: 4000,
+      max_completion_tokens: 4000,
       temperature: 0.1, // Lower temperature for more consistent output
     });
 
