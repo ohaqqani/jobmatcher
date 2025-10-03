@@ -154,7 +154,6 @@ Parse this resume and extract comprehensive candidate information. Return the da
 
 ${resumeText}`;
 
-    // @ts-expect-error - GPT-5 Responses API parameters not yet in SDK types
     const response = await openai.responses.create({
       model: "gpt-5",
       reasoning: { effort: "low" },
@@ -277,7 +276,6 @@ Please anonymize this resume and format it as clean HTML. Remove the candidate's
 Resume content:
 ${resumePlainText}`;
 
-    // @ts-expect-error - GPT-5 Responses API parameters not yet in SDK types
     const response = await openai.responses.create({
       model: "gpt-5",
       reasoning: { effort: "low" },
