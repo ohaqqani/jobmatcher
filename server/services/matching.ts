@@ -105,7 +105,6 @@ Please assess this candidate's potential for success in this role using fuzzy ma
     const response = await openai.chat.completions.create({
       model: "gpt-5-mini",
       messages: [{ role: "user", content: inputPrompt }],
-      temperature: 0.3,
     });
 
     const result = JSON.parse(response.choices[0].message.content || "{}");

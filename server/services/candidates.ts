@@ -157,7 +157,6 @@ ${resumeText}`;
     const response = await openai.chat.completions.create({
       model: "gpt-5-nano",
       messages: [{ role: "user", content: inputPrompt }],
-      temperature: 0.3,
     });
 
     const result = JSON.parse(response.choices[0].message.content || "{}");
@@ -278,8 +277,7 @@ ${resumePlainText}`;
     const response = await openai.chat.completions.create({
       model: "gpt-5-nano",
       messages: [{ role: "user", content: inputPrompt }],
-      temperature: 0.3,
-      max_tokens: 5000,
+      max_completion_tokens: 5000,
     });
 
     const rawContent = response.choices[0].message.content;

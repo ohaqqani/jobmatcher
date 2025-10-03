@@ -31,7 +31,6 @@ Extract all relevant skills and requirements for this position. Focus on skills 
     const response = await openai.chat.completions.create({
       model: "gpt-5-nano",
       messages: [{ role: "user", content: inputPrompt }],
-      temperature: 0.3,
     });
 
     const result = JSON.parse(response.choices[0].message.content || "{}");
