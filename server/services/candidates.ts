@@ -115,6 +115,9 @@ export async function extractCandidateInfo(resumeText: string): Promise<{
   try {
     const response = await openai.chat.completions.create({
       model: "gpt-5",
+      reasoning: { effort: "low" },
+      text: { verbosity: "low" },
+      // @ts-expect-error - GPT-5 parameters not yet in SDK types
       messages: [
         {
           role: "system",
@@ -242,6 +245,9 @@ export async function anonymizeResumeAsHTML(resumePlainText: string): Promise<st
   try {
     const response = await openai.chat.completions.create({
       model: "gpt-5",
+      reasoning: { effort: "low" },
+      text: { verbosity: "low" },
+      // @ts-expect-error - GPT-5 parameters not yet in SDK types
       messages: [
         {
           role: "system",
