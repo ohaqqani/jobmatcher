@@ -275,13 +275,16 @@ Resume content:
 ${resumePlainText}`;
 
     const response = await openai.chat.completions.create({
-      model: "gpt-5-nano",
+      model: "gpt-5-mini",
       messages: [{ role: "user", content: inputPrompt }],
       max_completion_tokens: 5000,
     });
 
-    const rawContent = response.choices[0].message.content;
+    console.log("OpenAI response:", JSON.stringify(response, null, 2));
+
+    const rawContent = response.choices[0]?.message?.content;
     if (!rawContent) {
+      console.error("No content in response. Full response:", response);
       throw new Error("No content returned from OpenAI API");
     }
 
