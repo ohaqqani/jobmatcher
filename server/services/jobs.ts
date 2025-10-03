@@ -28,7 +28,6 @@ Job Description: ${description}
 
 Extract all relevant skills and requirements for this position. Focus on skills that predict job performance success. Return as JSON format with a "skills" array.`;
 
-    // @ts-expect-error - GPT-5 Responses API parameters not yet in SDK types
     const response = await openai.responses.create({
       model: "gpt-5",
       reasoning: { effort: "low" },

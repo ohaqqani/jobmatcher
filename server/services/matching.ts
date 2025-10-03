@@ -96,7 +96,6 @@ ${resumeContent ? `ADDITIONAL CONTEXT FROM RESUME:\n${resumeContent}...` : ""}
 
 Please assess this candidate's potential for success in this role using fuzzy matching and predictive analysis. Return your assessment in JSON format.`;
 
-    // @ts-expect-error - GPT-5 Responses API parameters not yet in SDK types
     const response = await openai.responses.create({
       model: "gpt-5",
       reasoning: { effort: "low" },
