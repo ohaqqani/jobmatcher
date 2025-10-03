@@ -77,7 +77,6 @@ export default function CandidateTable({
               <CandidateRow
                 key={`${candidate.id}-${index}`}
                 candidate={candidate}
-                index={index}
                 isExpanded={expandedCandidates.has(candidate.id)}
                 onToggle={() => onRowToggle(candidate.id)}
               />

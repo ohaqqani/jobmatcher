@@ -6,7 +6,7 @@ export interface MatchRequest {
 }
 
 export interface MatchResponse {
-  matchResults: any[];
+  matchResults: CandidateWithMatch[];
 }
 
 /**

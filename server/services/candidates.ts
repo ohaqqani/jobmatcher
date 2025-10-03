@@ -154,14 +154,13 @@ Parse this resume and extract comprehensive candidate information. Return the da
 
 ${resumeText}`;
 
-    const response = await openai.responses.create({
-      model: "gpt-5",
-      reasoning: { effort: "low" },
-      text: { verbosity: "low" },
-      input: inputPrompt,
+    const response = await openai.chat.completions.create({
+      model: "gpt-5-nano",
+      messages: [{ role: "user", content: inputPrompt }],
+      temperature: 0.3,
     });
 
-    const result = JSON.parse(response.output_text || "{}");
+    const result = JSON.parse(response.choices[0].message.content || "{}");
 
     // Log the parsed result for debugging
     console.log("Parsed candidate data:", JSON.stringify(result, null, 2));
@@ -276,15 +275,14 @@ Please anonymize this resume and format it as clean HTML. Remove the candidate's
 Resume content:
 ${resumePlainText}`;
 
-    const response = await openai.responses.create({
-      model: "gpt-5",
-      reasoning: { effort: "low" },
-      text: { verbosity: "low" },
-      max_output_tokens: 5000,
-      input: inputPrompt,
+    const response = await openai.chat.completions.create({
+      model: "gpt-5-nano",
+      messages: [{ role: "user", content: inputPrompt }],
+      temperature: 0.3,
+      max_tokens: 5000,
     });
 
-    const rawContent = response.output_text;
+    const rawContent = response.choices[0].message.content;
     if (!rawContent) {
       throw new Error("No content returned from OpenAI API");
     }

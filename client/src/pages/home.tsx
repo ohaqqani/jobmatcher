@@ -6,11 +6,17 @@ import { Button } from "@/components/ui/button";
 import { HelpCircle, Search, User } from "lucide-react";
 import { useState } from "react";
 
+interface ProcessingFile {
+  name: string;
+  status: "processing";
+  progress: number;
+}
+
 export default function Home() {
   const [currentJobId, setCurrentJobId] = useState<string | null>(null);
   const [uploadedResumes, setUploadedResumes] = useState<string[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [processingFiles, setProcessingFiles] = useState<any[]>([]);
+  const [processingFiles, setProcessingFiles] = useState<ProcessingFile[]>([]);
   const [isAnalyzingComplete, setIsAnalyzingComplete] = useState(false);
 
   return (

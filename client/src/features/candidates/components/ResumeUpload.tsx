@@ -5,10 +5,17 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { useUploadResumes } from "../hooks/useUploadResumes";
 import { validateFiles, type FileValidationError } from "../utils/fileValidation";
+import type { UploadResult } from "../api/candidatesApi";
+
+interface ProcessingFile {
+  name: string;
+  status: "processing";
+  progress: number;
+}
 
 interface ResumeUploadProps {
   onFilesUploaded: (resumeIds: string[]) => void;
-  onProcessingUpdate: (files: any[]) => void;
+  onProcessingUpdate: (files: ProcessingFile[]) => void;
   setIsProcessing: (processing: boolean) => void;
 }
 
@@ -17,7 +24,7 @@ export default function ResumeUpload({
   onProcessingUpdate,
   setIsProcessing,
 }: ResumeUploadProps) {
-  const [uploadedFiles, setUploadedFiles] = useState<any[]>([]);
+  const [uploadedFiles, setUploadedFiles] = useState<UploadResult[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
@@ -94,7 +101,9 @@ export default function ResumeUpload({
     setUploadedFiles(newFiles);
 
     const successfulUploads = newFiles.filter((f) => f.status === "completed");
-    const resumeIds = successfulUploads.map((f) => f.resumeId);
+    const resumeIds = successfulUploads
+      .map((f) => f.resumeId)
+      .filter((id): id is string => id !== undefined);
     onFilesUploaded(resumeIds);
   };
 

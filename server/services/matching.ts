@@ -3,6 +3,12 @@ import { openai } from "./lib/openai";
 /**
  * Calculate match score between candidate and job using AI
  */
+interface ScorecardItem {
+  weight: number;
+  score: number;
+  comments: string;
+}
+
 export async function calculateMatchScore(
   candidateSkills: string[],
   jobRequiredSkills: string[],
@@ -10,7 +16,7 @@ export async function calculateMatchScore(
   resumeContent?: string
 ): Promise<{
   score: number;
-  scorecard: { [key: string]: any };
+  scorecard: Record<string, ScorecardItem>;
   matchingSkills: string[];
   analysis: string;
 }> {
@@ -96,14 +102,13 @@ ${resumeContent ? `ADDITIONAL CONTEXT FROM RESUME:\n${resumeContent}...` : ""}
 
 Please assess this candidate's potential for success in this role using fuzzy matching and predictive analysis. Return your assessment in JSON format.`;
 
-    const response = await openai.responses.create({
-      model: "gpt-5",
-      reasoning: { effort: "low" },
-      text: { verbosity: "low" },
-      input: inputPrompt,
+    const response = await openai.chat.completions.create({
+      model: "gpt-5-mini",
+      messages: [{ role: "user", content: inputPrompt }],
+      temperature: 0.3,
     });
 
-    const result = JSON.parse(response.output_text || "{}");
+    const result = JSON.parse(response.choices[0].message.content || "{}");
 
     console.log("Raw AI response result:", JSON.stringify(result, null, 2));
     console.log("Extracted scorecard:", JSON.stringify(result.scorecard, null, 2));

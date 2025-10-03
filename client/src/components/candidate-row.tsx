@@ -6,17 +6,11 @@ import { BarChart3, TrendingUp } from "lucide-react";
 
 interface CandidateRowProps {
   candidate: CandidateWithMatch;
-  index: number;
   isExpanded: boolean;
   onToggle: () => void;
 }
 
-export default function CandidateRow({
-  candidate,
-  index,
-  isExpanded,
-  onToggle,
-}: CandidateRowProps) {
+export default function CandidateRow({ candidate, isExpanded, onToggle }: CandidateRowProps) {
   const getMatchColor = (score: number) => {
     if (score >= 80) return "bg-accent";
     if (score >= 60) return "bg-warning";

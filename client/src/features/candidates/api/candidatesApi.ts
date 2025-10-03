@@ -1,7 +1,18 @@
+export interface CandidateInfo {
+  firstName: string;
+  lastName: string;
+  lastInitial: string;
+  email: string;
+  phone?: string;
+  skills: string[];
+  skills_comma_separated: string;
+  experience?: string;
+}
+
 export interface UploadResult {
   resumeId?: string;
   candidateId?: string;
-  candidateInfo?: any;
+  candidateInfo?: CandidateInfo;
   fileName: string;
   status: "completed" | "failed";
   error?: string;

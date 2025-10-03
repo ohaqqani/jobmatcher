@@ -28,14 +28,13 @@ Job Description: ${description}
 
 Extract all relevant skills and requirements for this position. Focus on skills that predict job performance success. Return as JSON format with a "skills" array.`;
 
-    const response = await openai.responses.create({
-      model: "gpt-5",
-      reasoning: { effort: "low" },
-      text: { verbosity: "low" },
-      input: inputPrompt,
+    const response = await openai.chat.completions.create({
+      model: "gpt-5-nano",
+      messages: [{ role: "user", content: inputPrompt }],
+      temperature: 0.3,
     });
 
-    const result = JSON.parse(response.output_text || "{}");
+    const result = JSON.parse(response.choices[0].message.content || "{}");
     return Array.isArray(result.skills) ? result.skills : [];
   } catch (error) {
     console.error("Failed to analyze job description:", error);

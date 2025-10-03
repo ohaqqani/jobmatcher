@@ -731,6 +731,7 @@ export {
   SidebarMenuAction,
   SidebarMenuBadge,
   SidebarMenuButton,
+  sidebarMenuButtonVariants, // eslint-disable-line react-refresh/only-export-components
   SidebarMenuItem,
   SidebarMenuSkeleton,
   SidebarMenuSub,
@@ -740,5 +741,5 @@ export {
   SidebarRail,
   SidebarSeparator,
   SidebarTrigger,
-  useSidebar,
+  useSidebar, // eslint-disable-line react-refresh/only-export-components
 };

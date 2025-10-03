@@ -66,11 +66,21 @@ router.delete("/api/clear-data", async (req, res) => {
   }
 
   try {
-    // Clear all storage
-    (storage as any).jobDescriptions.clear();
-    (storage as any).resumes.clear();
-    (storage as any).candidates.clear();
-    (storage as any).matchResults.clear();
+    // Clear all storage - only works with MemStorage
+    // Type assertion since this is development-only code
+    const memStorage = storage as unknown as {
+      jobDescriptions?: Map<string, unknown>;
+      resumes?: Map<string, unknown>;
+      candidates?: Map<string, unknown>;
+      matchResults?: Map<string, unknown>;
+    };
+
+    if (memStorage.jobDescriptions instanceof Map) {
+      memStorage.jobDescriptions.clear();
+      memStorage.resumes?.clear();
+      memStorage.candidates?.clear();
+      memStorage.matchResults?.clear();
+    }
 
     console.log("All data cleared for testing");
     res.json({ message: "All data cleared successfully" });
