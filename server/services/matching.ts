@@ -103,7 +103,7 @@ ${resumeContent ? `ADDITIONAL CONTEXT FROM RESUME:\n${resumeContent}...` : ""}
 Please assess this candidate's potential for success in this role using fuzzy matching and predictive analysis. Return your assessment in JSON format.`;
 
     const response = await openai.chat.completions.create({
-      model: "gpt-5-mini",
+      model: "gpt-4.1",
       messages: [{ role: "user", content: inputPrompt }],
     });
 

@@ -29,7 +29,7 @@ Job Description: ${description}
 Extract all relevant skills and requirements for this position. Focus on skills that predict job performance success. Return as JSON format with a "skills" array.`;
 
     const response = await openai.chat.completions.create({
-      model: "gpt-5-nano",
+      model: "gpt-4.1-nano",
       messages: [{ role: "user", content: inputPrompt }],
     });
 

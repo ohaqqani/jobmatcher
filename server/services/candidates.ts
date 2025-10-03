@@ -155,7 +155,7 @@ Parse this resume and extract comprehensive candidate information. Return the da
 ${resumeText}`;
 
     const response = await openai.chat.completions.create({
-      model: "gpt-5-nano",
+      model: "gpt-4.1-nano",
       messages: [{ role: "user", content: inputPrompt }],
     });
 
@@ -275,7 +275,7 @@ Resume content:
 ${resumePlainText}`;
 
     const response = await openai.chat.completions.create({
-      model: "gpt-5-mini",
+      model: "gpt-4.1-mini",
       messages: [{ role: "user", content: inputPrompt }],
       max_completion_tokens: 5000,
     });
