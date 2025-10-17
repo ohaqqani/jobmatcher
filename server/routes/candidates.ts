@@ -19,41 +19,39 @@ router.post("/api/resumes/upload", upload.array("file", 100), async (req, res) =
       return res.status(400).json({ message: "No files uploaded" });
     }
 
-    // Helper to flatten files from zips and normal files
+    // Helper to flatten files from zips and normal files (parallelized)
     const extractFilesFromUploads = async (files: Express.Multer.File[]) => {
-      const extracted: {
-        file: Express.Multer.File;
-        buffer: Buffer;
-        originalname: string;
-        mimetype: string;
-      }[] = [];
-      for (const file of files) {
+      // Process all files in parallel
+      const extractionPromises = files.map(async (file) => {
         const ext = file.originalname.split(".").pop()?.toLowerCase();
         if (
           file.mimetype === "application/zip" ||
           file.mimetype === "application/x-zip-compressed" ||
           (file.mimetype === "application/octet-stream" && ext === "zip")
         ) {
-          // Unzip and push valid files
+          // Unzip and extract valid files
           const zipFiles = await extractFilesFromZip(file.buffer);
-          for (const zipFile of zipFiles) {
-            extracted.push({
-              file,
-              buffer: zipFile.buffer,
-              originalname: zipFile.originalname,
-              mimetype: zipFile.mimetype,
-            });
-          }
-        } else {
-          extracted.push({
+          return zipFiles.map((zipFile) => ({
             file,
-            buffer: file.buffer,
-            originalname: file.originalname,
-            mimetype: file.mimetype,
-          });
+            buffer: zipFile.buffer,
+            originalname: zipFile.originalname,
+            mimetype: zipFile.mimetype,
+          }));
+        } else {
+          return [
+            {
+              file,
+              buffer: file.buffer,
+              originalname: file.originalname,
+              mimetype: file.mimetype,
+            },
+          ];
         }
-      }
-      return extracted;
+      });
+
+      // Wait for all extractions to complete and flatten the results
+      const extractedArrays = await Promise.all(extractionPromises);
+      return extractedArrays.flat();
     };
 
     const allFiles = await extractFilesFromUploads(req.files);
@@ -90,31 +88,29 @@ router.post("/api/resumes/upload", upload.array("file", 100), async (req, res) =
           );
         }
 
-        // Extract candidate information first
+        // Extract candidate information and generate anonymized HTML in parallel
         let candidateInfo;
+        let publicResumeHtml: string;
         try {
-          candidateInfo = await extractCandidateInfo(content);
+          // Run both LLM calls in parallel for better performance
+          const [extractedInfo, anonymizedHtml] = await Promise.all([
+            extractCandidateInfo(content),
+            anonymizeResumeAsHTML(content),
+          ]);
+
+          candidateInfo = extractedInfo;
+          publicResumeHtml = anonymizedHtml;
+
           console.log(
             `Extracted candidate info for: ${candidateInfo.firstName} ${candidateInfo.lastName} from ${originalname}`
           );
-        } catch (aiError) {
-          console.error(`Failed to extract candidate info from ${originalname}:`, aiError);
-          throw new Error(
-            `AI processing failed: ${aiError instanceof Error ? aiError.message : "Failed to analyze resume content"}`
-          );
-        }
-
-        // Generate anonymized HTML resume
-        let publicResumeHtml: string;
-        try {
-          publicResumeHtml = await anonymizeResumeAsHTML(content);
           console.log(
             `Generated anonymized HTML resume for ${candidateInfo.firstName} ${candidateInfo.lastInitial}`
           );
-        } catch (htmlError) {
-          console.error(`Failed to generate anonymized HTML for ${originalname}:`, htmlError);
+        } catch (aiError) {
+          console.error(`Failed to process resume with AI from ${originalname}:`, aiError);
           throw new Error(
-            `HTML generation failed: ${htmlError instanceof Error ? htmlError.message : "Failed to generate anonymized resume"}`
+            `AI processing failed: ${aiError instanceof Error ? aiError.message : "Failed to analyze resume content"}`
           );
         }
 

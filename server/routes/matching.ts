@@ -36,16 +36,22 @@ router.post("/api/job-descriptions/:jobId/match", async (req, res) => {
 
     console.log(`Processing candidate matching in parallel for ${candidates.length} candidates...`);
 
+    // Batch check for existing matches upfront to reduce database queries
+    const existingMatchesMap = new Map<string, (typeof existingResults)[0]>();
+    for (const match of existingResults) {
+      existingMatchesMap.set(match.id, match);
+    }
+
     // Process all candidates concurrently
     const candidatePromises = candidates.map(async (candidate) => {
       try {
-        // Check if match already exists to prevent duplicates
-        const existingMatch = await storage.getMatchResult(candidate.id, jobId);
+        // Check if match already exists using the batched results
+        const existingMatch = existingMatchesMap.get(candidate.id);
         if (existingMatch) {
           console.log(
             `Match already exists for candidate ${candidate.firstName} ${candidate.lastName} (${candidate.id}), skipping...`
           );
-          return existingMatch;
+          return existingMatch.matchResult;
         }
 
         console.log(
@@ -142,16 +148,22 @@ router.post("/api/job-descriptions/:jobId/match/public", async (req, res) => {
 
     console.log(`Processing candidate matching in parallel for ${candidates.length} candidates...`);
 
+    // Batch check for existing matches upfront to reduce database queries
+    const existingMatchesMap = new Map<string, (typeof existingResults)[0]>();
+    for (const match of existingResults) {
+      existingMatchesMap.set(match.id, match);
+    }
+
     // Process all candidates concurrently
     const candidatePromises = candidates.map(async (candidate) => {
       try {
-        // Check if match already exists to prevent duplicates
-        const existingMatch = await storage.getMatchResult(candidate.id, jobId);
+        // Check if match already exists using the batched results
+        const existingMatch = existingMatchesMap.get(candidate.id);
         if (existingMatch) {
           console.log(
             `Match already exists for candidate ${candidate.firstName} ${candidate.lastInitial} (${candidate.id}), skipping...`
           );
-          return existingMatch;
+          return existingMatch.matchResult;
         }
 
         console.log(

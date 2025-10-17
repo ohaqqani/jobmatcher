@@ -144,21 +144,24 @@ export class MemStorage implements IStorage {
       (result) => result.jobDescriptionId === jobId
     );
 
-    const candidatesWithMatch: CandidateWithMatch[] = [];
-
-    for (const matchResult of matchResults) {
+    // Process all match results in parallel
+    const candidatesWithMatchPromises = matchResults.map(async (matchResult) => {
       const candidate = this.candidates.get(matchResult.candidateId);
-      if (candidate) {
-        const resume = this.resumes.get(candidate.resumeId);
-        if (resume) {
-          candidatesWithMatch.push({
-            ...candidate,
-            resume,
-            matchResult,
-          });
-        }
-      }
-    }
+      if (!candidate) return null;
+
+      const resume = this.resumes.get(candidate.resumeId);
+      if (!resume) return null;
+
+      return {
+        ...candidate,
+        resume,
+        matchResult,
+      } as CandidateWithMatch;
+    });
+
+    const candidatesWithMatch = (await Promise.all(candidatesWithMatchPromises)).filter(
+      Boolean
+    ) as CandidateWithMatch[];
 
     return candidatesWithMatch.sort((a, b) => b.matchResult.matchScore - a.matchResult.matchScore);
   }
