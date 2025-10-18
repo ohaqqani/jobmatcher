@@ -345,3 +345,54 @@ export async function extractFilesFromZip(zipBuffer: Buffer): Promise<
 
   return extracted;
 }
+
+/**
+ * Helper to check if file is a ZIP file
+ */
+function isZipFile(file: Express.Multer.File): boolean {
+  const ext = file.originalname.split(".").pop()?.toLowerCase();
+  return (
+    file.mimetype === "application/zip" ||
+    file.mimetype === "application/x-zip-compressed" ||
+    (file.mimetype === "application/octet-stream" && ext === "zip")
+  );
+}
+
+/**
+ * Extract and flatten files from uploads, handling ZIP archives
+ */
+export async function extractFilesFromUploads(files: Express.Multer.File[]): Promise<
+  Array<{
+    file: Express.Multer.File;
+    buffer: Buffer;
+    originalname: string;
+    mimetype: string;
+  }>
+> {
+  // Process all files in parallel
+  const extractionPromises = files.map(async (file) => {
+    if (isZipFile(file)) {
+      // Unzip and extract valid files
+      const zipFiles = await extractFilesFromZip(file.buffer);
+      return zipFiles.map((zipFile) => ({
+        file,
+        buffer: zipFile.buffer,
+        originalname: zipFile.originalname,
+        mimetype: zipFile.mimetype,
+      }));
+    } else {
+      return [
+        {
+          file,
+          buffer: file.buffer,
+          originalname: file.originalname,
+          mimetype: file.mimetype,
+        },
+      ];
+    }
+  });
+
+  // Wait for all extractions to complete and flatten the results
+  const extractedArrays = await Promise.all(extractionPromises);
+  return extractedArrays.flat();
+}

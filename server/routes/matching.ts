@@ -2,6 +2,7 @@ import { PublicCandidateProfile } from "@shared/schemas";
 import { Router } from "express";
 import { calculateMatchScore } from "../services/matching";
 import { storage } from "../storage";
+import { generateTextHash } from "../services/lib/hash";
 
 const router = Router();
 
@@ -25,48 +26,40 @@ router.post("/api/job-descriptions/:jobId/match", async (req, res) => {
     const candidates = await storage.getCandidatesByResumeIds(resumeIds);
     console.log(`Found ${candidates.length} candidates for ${resumeIds.length} resume IDs`);
 
-    // Check if we already have matches for this job to prevent duplicate processing
-    const existingResults = await storage.getMatchResultsByJobId(jobId);
-    if (existingResults.length > 0) {
-      console.log(
-        `Found ${existingResults.length} existing matches for job ${jobId}, returning existing results`
-      );
-      return res.json({ matchResults: existingResults });
-    }
-
     console.log(`Processing candidate matching in parallel for ${candidates.length} candidates...`);
-
-    // Batch check for existing matches upfront to reduce database queries
-    const existingMatchesMap = new Map<string, (typeof existingResults)[0]>();
-    for (const match of existingResults) {
-      existingMatchesMap.set(match.id, match);
-    }
 
     // Process all candidates concurrently
     const candidatePromises = candidates.map(async (candidate) => {
       try {
-        // Check if match already exists using the batched results
-        const existingMatch = existingMatchesMap.get(candidate.id);
+        // Get resume to access content hash
+        const resume = await storage.getResume(candidate.resumeId);
+        if (!resume) {
+          throw new Error(`Resume not found for candidate ${candidate.id}`);
+        }
+
+        // Check if match already exists by content hashes
+        const existingMatch = await storage.getMatchResultByHashes(
+          resume.contentHash,
+          jobDesc.contentHash
+        );
+
         if (existingMatch) {
           console.log(
-            `Match already exists for candidate ${candidate.firstName} ${candidate.lastName} (${candidate.id}), skipping...`
+            `Match already exists for resume hash ${resume.contentHash.substring(0, 16)}... and job hash ${jobDesc.contentHash.substring(0, 16)}..., reusing cached result`
           );
-          return existingMatch.matchResult;
+          return existingMatch;
         }
 
         console.log(
           `Creating new match for candidate ${candidate.firstName} ${candidate.lastName} (${candidate.id})`
         );
 
-        // Get resume content for enhanced analysis
-        const resume = await storage.getResume(candidate.resumeId);
-
         // Calculate match score with fuzzy matching
         const matchData = await calculateMatchScore(
           candidate.skills || [],
           jobDesc.requiredSkills || [],
           candidate.experience || undefined,
-          resume?.content
+          resume.content
         );
 
         console.log(
@@ -77,8 +70,10 @@ router.post("/api/job-descriptions/:jobId/match", async (req, res) => {
           JSON.stringify(matchData.scorecard, null, 2)
         );
 
-        // Create match result
+        // Create match result with content hashes
         const matchResult = await storage.createMatchResult({
+          resumeContentHash: resume.contentHash,
+          jobContentHash: jobDesc.contentHash,
           jobDescriptionId: jobId,
           candidateId: candidate.id,
           matchScore: matchData.score,
@@ -137,38 +132,17 @@ router.post("/api/job-descriptions/:jobId/match/public", async (req, res) => {
       return res.status(404).json({ message: "Job description not found" });
     }
 
-    // Check if we already have matches for this job to prevent duplicate processing
-    const existingResults = await storage.getMatchResultsByJobId(jobId);
-    if (existingResults.length > 0) {
-      console.log(
-        `Found ${existingResults.length} existing matches for job ${jobId}, returning existing results`
-      );
-      return res.json({ matchResults: existingResults });
-    }
-
     console.log(`Processing candidate matching in parallel for ${candidates.length} candidates...`);
-
-    // Batch check for existing matches upfront to reduce database queries
-    const existingMatchesMap = new Map<string, (typeof existingResults)[0]>();
-    for (const match of existingResults) {
-      existingMatchesMap.set(match.id, match);
-    }
 
     // Process all candidates concurrently
     const candidatePromises = candidates.map(async (candidate) => {
       try {
-        // Check if match already exists using the batched results
-        const existingMatch = existingMatchesMap.get(candidate.id);
-        if (existingMatch) {
-          console.log(
-            `Match already exists for candidate ${candidate.firstName} ${candidate.lastInitial} (${candidate.id}), skipping...`
-          );
-          return existingMatch.matchResult;
-        }
-
         console.log(
-          `Creating new match for candidate ${candidate.firstName} ${candidate.lastInitial} (${candidate.id})`
+          `Processing public candidate ${candidate.firstName} ${candidate.lastInitial} (${candidate.id})`
         );
+
+        // Note: Public candidates don't have stored resumes, so we can't use hash-based caching
+        // Each public match request will calculate fresh results
 
         // Calculate match score with fuzzy matching
         const matchData = await calculateMatchScore(
@@ -186,8 +160,19 @@ router.post("/api/job-descriptions/:jobId/match/public", async (req, res) => {
           JSON.stringify(matchData.scorecard, null, 2)
         );
 
-        // Create match result
+        // For public candidates, we calculate a temporary hash from their profile data for caching
+        const profileHash = generateTextHash(
+          JSON.stringify({
+            skills: candidate.skills,
+            experience: candidate.experience,
+            html: candidate.publicResumeHtml,
+          })
+        );
+
+        // Create match result with content hashes
         const matchResult = await storage.createMatchResult({
+          resumeContentHash: profileHash,
+          jobContentHash: jobDesc.contentHash,
           jobDescriptionId: jobId,
           candidateId: candidate.id,
           matchScore: matchData.score,

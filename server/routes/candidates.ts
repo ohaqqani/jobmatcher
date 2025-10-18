@@ -1,59 +1,229 @@
 import { Router } from "express";
+import type { InsertCandidate } from "@shared/schemas";
 import {
   anonymizeResumeAsHTML,
   extractCandidateInfo,
-  extractFilesFromZip,
+  extractFilesFromUploads,
   extractTextFromFile,
 } from "../services/candidates";
 import { upload } from "../services/lib/fileUpload";
 import { storage } from "../storage";
+import { generateContentHash } from "../services/lib/hash";
 
 const router = Router();
+
+// Configuration constants
+const CONFIG = {
+  MAX_FILES: 100,
+  PROCESSING_TIMEOUT_MS: 30000,
+  MIN_TEXT_LENGTH: 10,
+} as const;
+
+/**
+ * Wraps a promise with a timeout
+ */
+async function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  errorMessage: string
+): Promise<T> {
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    setTimeout(() => reject(new Error(errorMessage)), timeoutMs);
+  });
+  return Promise.race([promise, timeoutPromise]);
+}
+
+type ProcessResult = {
+  fileName: string;
+  fileIndex: number;
+  status: "completed" | "failed" | "skipped";
+  error?: string;
+  resumeId?: string;
+  candidateId?: string;
+  candidateInfo?: Omit<InsertCandidate, "resumeId"> & {
+    skills_comma_separated?: string; // Extra field for UI display
+  };
+  resumePlainText?: string;
+  publicResumeHtml?: string;
+};
+
+/**
+ * Process a single resume file
+ */
+async function processResumeFile(
+  buffer: Buffer,
+  originalname: string,
+  mimetype: string,
+  index: number,
+  totalFiles: number
+): Promise<ProcessResult> {
+  console.log(
+    `Processing file ${index + 1}/${totalFiles}: ${originalname}, size: ${buffer.length}, type: ${mimetype}`
+  );
+
+  // Generate content hash for deduplication
+  const contentHash = generateContentHash(buffer);
+  console.log(`Generated content hash: ${contentHash.substring(0, 16)}... for ${originalname}`);
+
+  // Check if this exact resume has been processed before
+  const existingResume = await storage.getResumeByHash(contentHash);
+  if (existingResume) {
+    console.log(`Duplicate resume detected for ${originalname}, skipping processing`);
+
+    // Retrieve existing candidate data
+    const existingCandidate = await storage.getCandidateByResumeId(existingResume.id);
+
+    if (existingCandidate) {
+      return {
+        resumeId: existingResume.id,
+        candidateId: existingCandidate.id,
+        candidateInfo: {
+          firstName: existingCandidate.firstName,
+          lastName: existingCandidate.lastName,
+          lastInitial: existingCandidate.lastInitial,
+          email: existingCandidate.email,
+          phone: existingCandidate.phone || undefined,
+          skills: existingCandidate.skills as string[],
+          skills_comma_separated: (existingCandidate.skills as string[]).join(", "),
+          experience: existingCandidate.experience || undefined,
+        },
+        fileName: originalname,
+        resumePlainText: existingResume.content,
+        publicResumeHtml: existingResume.publicResumeHtml || undefined,
+        status: "skipped",
+        fileIndex: index + 1,
+      };
+    }
+  }
+
+  // Extract text from file with timeout protection
+  const content = await withTimeout(
+    extractTextFromFile(buffer, mimetype),
+    CONFIG.PROCESSING_TIMEOUT_MS,
+    "File processing timeout after 30 seconds"
+  );
+  console.log(`Extracted text length: ${content.length} characters for ${originalname}`);
+
+  // Extract candidate information and generate anonymized HTML in parallel
+  const [candidateInfo, publicResumeHtml] = await Promise.all([
+    extractCandidateInfo(content),
+    anonymizeResumeAsHTML(content),
+  ]);
+
+  console.log(
+    `Extracted candidate info for: ${candidateInfo.firstName} ${candidateInfo.lastName} from ${originalname}`
+  );
+  console.log(
+    `Generated anonymized HTML resume for ${candidateInfo.firstName} ${candidateInfo.lastInitial}`
+  );
+
+  // Create resume record with both original content and anonymized HTML
+  const resume = await storage.createResume({
+    contentHash,
+    fileName: originalname,
+    fileSize: buffer.length,
+    fileType: mimetype,
+    content,
+    publicResumeHtml: publicResumeHtml,
+  });
+
+  // Create candidate record
+  const candidate = await storage.createCandidate({
+    resumeId: resume.id,
+    ...candidateInfo,
+  });
+
+  return {
+    resumeId: resume.id,
+    candidateId: candidate.id,
+    candidateInfo: candidateInfo,
+    fileName: originalname,
+    resumePlainText: content,
+    publicResumeHtml: publicResumeHtml,
+    status: "completed",
+    fileIndex: index + 1,
+  };
+}
+
+/**
+ * Process a file with comprehensive error handling
+ */
+async function processFileWithErrorHandling(
+  item: { buffer: Buffer; originalname: string; mimetype: string },
+  index: number,
+  totalFiles: number
+): Promise<ProcessResult> {
+  const { buffer, originalname, mimetype } = item;
+  try {
+    return await processResumeFile(buffer, originalname, mimetype, index, totalFiles);
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    console.error(`Failed to process file ${originalname}:`, {
+      error: errorMessage,
+      fileIndex: index + 1,
+      fileName: originalname,
+      fileSize: buffer.length,
+      mimeType: mimetype,
+    });
+
+    return {
+      fileName: originalname,
+      status: "failed",
+      error: errorMessage,
+      fileIndex: index + 1,
+    };
+  }
+}
+
+/**
+ * Format the response summary from processing results
+ */
+function formatResponseSummary(results: ProcessResult[], totalFiles: number) {
+  const successfulUploads = results.filter((r) => r.status === "completed");
+  const failedUploads = results.filter((r) => r.status === "failed");
+  const skippedUploads = results.filter((r) => r.status === "skipped");
+
+  console.log(
+    `Upload batch completed: ${successfulUploads.length} successful, ${skippedUploads.length} skipped (duplicates), ${failedUploads.length} failed out of ${totalFiles} total files`
+  );
+
+  if (failedUploads.length > 0) {
+    console.error(
+      "Failed files:",
+      failedUploads.map((f) => ({ fileName: f.fileName, error: f.error }))
+    );
+  }
+
+  if (skippedUploads.length > 0) {
+    console.log(
+      "Skipped duplicate files:",
+      skippedUploads.map((f) => f.fileName)
+    );
+  }
+
+  return {
+    results,
+    summary: {
+      totalFiles,
+      successfulUploads: successfulUploads.length,
+      skippedUploads: skippedUploads.length,
+      failedUploads: failedUploads.length,
+      message: `Successfully processed ${successfulUploads.length} out of ${totalFiles} files (${skippedUploads.length} duplicates skipped)`,
+    },
+  };
+}
 
 /**
  * Upload and process resumes
  */
-router.post("/api/resumes/upload", upload.array("file", 100), async (req, res) => {
+router.post("/api/resumes/upload", upload.array("file", CONFIG.MAX_FILES), async (req, res) => {
   try {
+    // Validate request
     if (!req.files || !Array.isArray(req.files) || req.files.length === 0) {
       return res.status(400).json({ message: "No files uploaded" });
     }
 
-    // Helper to flatten files from zips and normal files (parallelized)
-    const extractFilesFromUploads = async (files: Express.Multer.File[]) => {
-      // Process all files in parallel
-      const extractionPromises = files.map(async (file) => {
-        const ext = file.originalname.split(".").pop()?.toLowerCase();
-        if (
-          file.mimetype === "application/zip" ||
-          file.mimetype === "application/x-zip-compressed" ||
-          (file.mimetype === "application/octet-stream" && ext === "zip")
-        ) {
-          // Unzip and extract valid files
-          const zipFiles = await extractFilesFromZip(file.buffer);
-          return zipFiles.map((zipFile) => ({
-            file,
-            buffer: zipFile.buffer,
-            originalname: zipFile.originalname,
-            mimetype: zipFile.mimetype,
-          }));
-        } else {
-          return [
-            {
-              file,
-              buffer: file.buffer,
-              originalname: file.originalname,
-              mimetype: file.mimetype,
-            },
-          ];
-        }
-      });
-
-      // Wait for all extractions to complete and flatten the results
-      const extractedArrays = await Promise.all(extractionPromises);
-      return extractedArrays.flat();
-    };
-
+    // Extract files from uploads (handles ZIP archives)
     const allFiles = await extractFilesFromUploads(req.files);
 
     if (allFiles.length === 0) {
@@ -64,144 +234,15 @@ router.post("/api/resumes/upload", upload.array("file", 100), async (req, res) =
 
     console.log(`Processing ${allFiles.length} files in parallel...`);
 
-    // Process all files concurrently with comprehensive error handling
-    const filePromises = allFiles.map(async (item, index) => {
-      const { buffer, originalname, mimetype } = item;
-      try {
-        console.log(
-          `Processing file ${index + 1}/${allFiles.length}: ${originalname}, size: ${buffer.length}, type: ${mimetype}`
-        );
-        // Extract text from file with timeout protection
-        const extractionPromise = extractTextFromFile(buffer, mimetype);
-        const timeoutPromise = new Promise<never>((_, reject) => {
-          setTimeout(() => reject(new Error("File processing timeout after 30 seconds")), 30000);
-        });
-
-        let content: string;
-        try {
-          content = await Promise.race([extractionPromise, timeoutPromise]);
-          console.log(`Extracted text length: ${content.length} characters for ${originalname}`);
-        } catch (extractError) {
-          console.error(`Failed to extract text from ${originalname}:`, extractError);
-          throw new Error(
-            `Text extraction failed: ${extractError instanceof Error ? extractError.message : "Unknown extraction error"}`
-          );
-        }
-
-        // Extract candidate information and generate anonymized HTML in parallel
-        let candidateInfo;
-        let publicResumeHtml: string;
-        try {
-          // Run both LLM calls in parallel for better performance
-          const [extractedInfo, anonymizedHtml] = await Promise.all([
-            extractCandidateInfo(content),
-            anonymizeResumeAsHTML(content),
-          ]);
-
-          candidateInfo = extractedInfo;
-          publicResumeHtml = anonymizedHtml;
-
-          console.log(
-            `Extracted candidate info for: ${candidateInfo.firstName} ${candidateInfo.lastName} from ${originalname}`
-          );
-          console.log(
-            `Generated anonymized HTML resume for ${candidateInfo.firstName} ${candidateInfo.lastInitial}`
-          );
-        } catch (aiError) {
-          console.error(`Failed to process resume with AI from ${originalname}:`, aiError);
-          throw new Error(
-            `AI processing failed: ${aiError instanceof Error ? aiError.message : "Failed to analyze resume content"}`
-          );
-        }
-
-        // Create resume record with both original content and anonymized HTML
-        let resume;
-        try {
-          resume = await storage.createResume({
-            fileName: originalname,
-            fileSize: buffer.length,
-            fileType: mimetype,
-            content,
-            publicResumeHtml: publicResumeHtml,
-          });
-        } catch (resumeError) {
-          console.error(`Failed to create resume record for ${originalname}:`, resumeError);
-          throw new Error(
-            `Database error: ${resumeError instanceof Error ? resumeError.message : "Failed to save resume"}`
-          );
-        }
-
-        // Create candidate record
-        let candidate;
-        try {
-          candidate = await storage.createCandidate({
-            resumeId: resume.id,
-            ...candidateInfo,
-          });
-        } catch (candidateError) {
-          console.error(`Failed to create candidate record for ${originalname}:`, candidateError);
-          throw new Error(
-            `Database error: ${candidateError instanceof Error ? candidateError.message : "Failed to save candidate"}`
-          );
-        }
-
-        return {
-          resumeId: resume.id,
-          candidateId: candidate.id,
-          candidateInfo: candidateInfo,
-          fileName: originalname,
-          resumePlainText: content,
-          publicResumeHtml: publicResumeHtml,
-          status: "completed",
-          fileIndex: index + 1,
-        };
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : "Unknown error";
-        console.error(`Failed to process file ${originalname}:`, {
-          error: errorMessage,
-          fileIndex: index + 1,
-          fileName: originalname,
-          fileSize: buffer.length,
-          mimeType: mimetype,
-        });
-
-        return {
-          fileName: originalname,
-          status: "failed",
-          error: errorMessage,
-          fileIndex: index + 1,
-        };
-      }
-    });
-
-    // Wait for all files to be processed
-    const results = await Promise.all(filePromises);
-
-    // Categorize results
-    const successfulUploads = results.filter((r) => r?.status === "completed");
-    const failedUploads = results.filter((r) => r?.status === "failed");
-
-    console.log(
-      `Upload batch completed: ${successfulUploads.length} successful, ${failedUploads.length} failed out of ${allFiles.length} total files`
+    // Process all files in parallel
+    const results = await Promise.all(
+      allFiles.map((item, index) => processFileWithErrorHandling(item, index, allFiles.length))
     );
 
-    if (failedUploads.length > 0) {
-      console.error(
-        "Failed files:",
-        failedUploads.map((f) => ({ fileName: f?.fileName, error: f?.error }))
-      );
-    }
-
     console.log(`Upload processing complete. Results: ${results.length} items`);
-    res.json({
-      results,
-      summary: {
-        totalFiles: allFiles.length,
-        successfulUploads: successfulUploads.length,
-        failedUploads: failedUploads.length,
-        message: `Successfully processed ${successfulUploads.length} out of ${allFiles.length} files`,
-      },
-    });
+
+    // Format and return response
+    res.json(formatResponseSummary(results, allFiles.length));
   } catch (error) {
     res.status(500).json({ message: error instanceof Error ? error.message : "Unknown error" });
   }

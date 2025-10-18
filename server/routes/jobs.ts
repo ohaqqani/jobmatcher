@@ -2,6 +2,7 @@ import { Router } from "express";
 import { insertJobDescriptionSchema } from "@shared/schemas";
 import { storage } from "../storage";
 import { analyzeJobDescriptionWithAI } from "../services/jobs";
+import { generateTextHash } from "../services/lib/hash";
 
 const router = Router();
 
@@ -10,8 +11,33 @@ const router = Router();
  */
 router.post("/api/job-descriptions", async (req, res) => {
   try {
-    const validatedData = insertJobDescriptionSchema.parse(req.body);
+    const { title, description } = req.body;
+
+    // Normalize inputs by trimming whitespace
+    const normalizedTitle = title.trim();
+    const normalizedDescription = description.trim();
+
+    // Generate content hash from normalized description only
+    const contentHash = generateTextHash(normalizedDescription);
+    console.log(`Generated job description hash: ${contentHash.substring(0, 16)}...`);
+
+    // Check if this exact job description already exists
+    const existingJobDesc = await storage.getJobDescriptionByHash(contentHash);
+    if (existingJobDesc) {
+      console.log(
+        `Duplicate job description detected, returning existing record: ${existingJobDesc.id}`
+      );
+      return res.json(existingJobDesc);
+    }
+
+    // Validate and create new job description with normalized values
+    const validatedData = insertJobDescriptionSchema.parse({
+      contentHash,
+      title: normalizedTitle,
+      description: normalizedDescription,
+    });
     const jobDesc = await storage.createJobDescription(validatedData);
+    console.log(`Created new job description: ${jobDesc.id}`);
     res.json(jobDesc);
   } catch (error) {
     res.status(400).json({ message: error instanceof Error ? error.message : "Unknown error" });

@@ -7,6 +7,7 @@ export const jobDescriptions = pgTable("job_descriptions", {
   id: varchar("id")
     .primaryKey()
     .default(sql`gen_random_uuid()`),
+  contentHash: varchar("content_hash", { length: 64 }).notNull().unique(),
   title: text("title").notNull(),
   description: text("description").notNull(),
   requiredSkills: jsonb("required_skills").$type<string[]>().default([]),
@@ -14,6 +15,7 @@ export const jobDescriptions = pgTable("job_descriptions", {
 });
 
 export const insertJobDescriptionSchema = createInsertSchema(jobDescriptions).pick({
+  contentHash: true,
   title: true,
   description: true,
 });

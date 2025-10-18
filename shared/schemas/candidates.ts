@@ -7,6 +7,7 @@ export const resumes = pgTable("resumes", {
   id: varchar("id")
     .primaryKey()
     .default(sql`gen_random_uuid()`),
+  contentHash: varchar("content_hash", { length: 64 }).notNull().unique(),
   fileName: text("file_name").notNull(),
   fileSize: integer("file_size").notNull(),
   fileType: text("file_type").notNull(),
@@ -33,6 +34,7 @@ export const candidates = pgTable("candidates", {
 });
 
 export const insertResumeSchema = createInsertSchema(resumes).pick({
+  contentHash: true,
   fileName: true,
   fileSize: true,
   fileType: true,
