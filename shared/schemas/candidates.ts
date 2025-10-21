@@ -12,7 +12,7 @@ export const resumes = pgTable("resumes", {
   fileSize: integer("file_size").notNull(),
   fileType: text("file_type").notNull(),
   content: text("content").notNull(),
-  publicResumeHtml: text("publicResumeHtml"),
+  publicResumeHtml: text("public_resume_html"),
   uploadedAt: timestamp("uploaded_at").defaultNow(),
 });
 

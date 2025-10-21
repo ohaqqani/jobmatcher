@@ -20,6 +20,10 @@ async function enableRLS() {
     await sql`ALTER TABLE resumes ENABLE ROW LEVEL SECURITY`;
     console.log("✓ RLS enabled on resumes");
 
+    console.log("Enabling RLS on candidates table...");
+    await sql`ALTER TABLE candidates ENABLE ROW LEVEL SECURITY`;
+    console.log("✓ RLS enabled on candidates");
+
     console.log("Enabling RLS on match_results table...");
     await sql`ALTER TABLE match_results ENABLE ROW LEVEL SECURITY`;
     console.log("✓ RLS enabled on match_results");

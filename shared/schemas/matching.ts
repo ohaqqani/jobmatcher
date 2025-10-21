@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { integer, jsonb, pgTable, text, timestamp, varchar } from "drizzle-orm/pg-core";
+import { integer, jsonb, pgTable, text, timestamp, varchar, unique } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import { jobDescriptions } from "./jobs";
@@ -27,10 +27,10 @@ export const matchResults = pgTable(
     analysis: text("analysis"),
     createdAt: timestamp("created_at").defaultNow(),
   },
-  (table) => ({
+  (table) => [
     // Composite unique constraint to prevent duplicate matches
-    uniqueMatch: sql`UNIQUE (${table.resumeContentHash}, ${table.jobContentHash})`,
-  })
+    unique("match_results_unique_match").on(table.resumeContentHash, table.jobContentHash),
+  ]
 );
 
 export const insertMatchResultSchema = createInsertSchema(matchResults).pick({
