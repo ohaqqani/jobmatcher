@@ -1,4 +1,5 @@
 import { openai } from "./lib/openai";
+import { retryWithBackoff, shouldSimulateRateLimit, RateLimitError } from "./lib/llmRetry";
 
 /**
  * Analyze job description with AI to extract required skills
@@ -28,15 +29,23 @@ Job Description: ${description}
 
 Extract all relevant skills and requirements for this position. Focus on skills that predict job performance success. Return as JSON format with a "skills" array.`;
 
-    const response = await openai.chat.completions.create({
-      model: "gpt-4.1-nano",
-      messages: [{ role: "user", content: inputPrompt }],
+    const response = await retryWithBackoff(() => {
+      // Simulate rate limit for testing if enabled
+      if (shouldSimulateRateLimit()) {
+        throw new RateLimitError("Simulated rate limit for testing");
+      }
+
+      return openai.chat.completions.create({
+        model: "gpt-4.1-nano",
+        messages: [{ role: "user", content: inputPrompt }],
+      });
     });
 
     const result = JSON.parse(response.choices[0].message.content || "{}");
     return Array.isArray(result.skills) ? result.skills : [];
   } catch (error) {
+    // For rate limit errors, throw them up to be caught by route handlers
     console.error("Failed to analyze job description:", error);
-    return [];
+    throw error;
   }
 }

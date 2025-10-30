@@ -3,6 +3,7 @@ import mammoth from "mammoth";
 import pdf from "pdf-parse";
 import { openai } from "./lib/openai";
 import { cleanHTMLContent, normalizeText } from "./lib/textProcessing";
+import { retryWithBackoff, shouldSimulateRateLimit, RateLimitError } from "./lib/llmRetry";
 
 /**
  * Extract text from PDF or DOC/DOCX files
@@ -154,9 +155,16 @@ Parse this resume and extract comprehensive candidate information. Return the da
 
 ${resumeText}`;
 
-    const response = await openai.chat.completions.create({
-      model: "gpt-4.1-nano",
-      messages: [{ role: "user", content: inputPrompt }],
+    const response = await retryWithBackoff(() => {
+      // Simulate rate limit for testing if enabled
+      if (shouldSimulateRateLimit()) {
+        throw new RateLimitError("Simulated rate limit for testing");
+      }
+
+      return openai.chat.completions.create({
+        model: "gpt-4.1-nano",
+        messages: [{ role: "user", content: inputPrompt }],
+      });
     });
 
     const result = JSON.parse(response.choices[0].message.content || "{}");
@@ -210,15 +218,7 @@ ${resumeText}`;
     };
   } catch (error) {
     console.error("Failed to extract candidate info:", error);
-    return {
-      firstName: "Unknown",
-      lastName: "Unknown",
-      lastInitial: "Unknown",
-      email: "",
-      skills: [],
-      skills_comma_separated: "",
-      experience: "Failed to extract experience information",
-    };
+    throw error;
   }
 }
 
@@ -237,8 +237,7 @@ export async function anonymizeResumeAsHTML(resumePlainText: string): Promise<st
     resumePlainText = resumePlainText.substring(0, 50000);
   }
 
-  try {
-    const inputPrompt = `You are an expert resume anonymization and HTML formatting specialist. Your task is to anonymize personally identifiable information from resumes and format them as clean, professional HTML.
+  const inputPrompt = `You are an expert resume anonymization and HTML formatting specialist. Your task is to anonymize personally identifiable information from resumes and format them as clean, professional HTML.
 
 ANONYMIZATION REQUIREMENTS:
 - Remove ALL email addresses completely
@@ -274,40 +273,36 @@ Please anonymize this resume and format it as clean HTML. Remove the candidate's
 Resume content:
 ${resumePlainText}`;
 
-    const response = await openai.chat.completions.create({
+  const response = await retryWithBackoff(() => {
+    // Simulate rate limit for testing if enabled
+    if (shouldSimulateRateLimit()) {
+      throw new RateLimitError("Simulated rate limit for testing");
+    }
+
+    return openai.chat.completions.create({
       model: "gpt-4.1-mini",
       messages: [{ role: "user", content: inputPrompt }],
       max_completion_tokens: 5000,
     });
+  });
 
-    console.log("OpenAI response:", JSON.stringify(response, null, 2));
+  console.log("OpenAI response:", JSON.stringify(response, null, 2));
 
-    const rawContent = response.choices[0]?.message?.content;
-    if (!rawContent) {
-      console.error("No content in response. Full response:", response);
-      throw new Error("No content returned from OpenAI API");
-    }
-
-    // Clean up the HTML content to ensure it's embeddable
-    const htmlContent = cleanHTMLContent(rawContent);
-
-    // Basic validation - ensure we have some HTML content
-    if (htmlContent.length < 10 || !htmlContent.includes("<")) {
-      throw new Error("Generated content does not appear to be valid HTML");
-    }
-
-    return htmlContent;
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : "Unknown error";
-    console.error("Failed to anonymize resume with LLM:", errorMessage);
-
-    // Return more specific error information in development
-    if (process.env.NODE_ENV === "development") {
-      return `<div><p>Error processing resume content: ${errorMessage}</p></div>`;
-    }
-
-    return "<div><p>Error processing resume content</p></div>";
+  const rawContent = response.choices[0]?.message?.content;
+  if (!rawContent) {
+    console.error("No content in response. Full response:", response);
+    throw new Error("No content returned from OpenAI API");
   }
+
+  // Clean up the HTML content to ensure it's embeddable
+  const htmlContent = cleanHTMLContent(rawContent);
+
+  // Basic validation - ensure we have some HTML content
+  if (htmlContent.length < 10 || !htmlContent.includes("<")) {
+    throw new Error("Generated content does not appear to be valid HTML");
+  }
+
+  return htmlContent;
 }
 
 /**

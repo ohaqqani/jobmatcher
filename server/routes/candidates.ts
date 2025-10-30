@@ -9,6 +9,7 @@ import {
 import { upload } from "../services/lib/fileUpload";
 import { storage } from "../storage";
 import { generateContentHash } from "../services/lib/hash";
+import { isRateLimitError } from "../services/lib/llmRetry";
 
 const router = Router();
 
@@ -104,43 +105,97 @@ async function processResumeFile(
   );
   console.log(`Extracted text length: ${content.length} characters for ${originalname}`);
 
-  // Extract candidate information and generate anonymized HTML in parallel
-  const [candidateInfo, publicResumeHtml] = await Promise.all([
-    extractCandidateInfo(content),
-    anonymizeResumeAsHTML(content),
-  ]);
-
-  console.log(
-    `Extracted candidate info for: ${candidateInfo.firstName} ${candidateInfo.lastName} from ${originalname}`
-  );
-  console.log(
-    `Generated anonymized HTML resume for ${candidateInfo.firstName} ${candidateInfo.lastInitial}`
-  );
-
-  // Create resume record with both original content and anonymized HTML
+  // Create resume record first with content
   const resume = await storage.createResume({
     contentHash,
     fileName: originalname,
     fileSize: buffer.length,
     fileType: mimetype,
     content,
-    publicResumeHtml: publicResumeHtml,
+    publicResumeHtml: null, // Will be updated when anonymization completes
   });
 
-  // Create candidate record
-  const candidate = await storage.createCandidate({
-    resumeId: resume.id,
-    ...candidateInfo,
-  });
+  // Extract candidate information
+  let candidateInfo:
+    | (Omit<InsertCandidate, "resumeId"> & { skills_comma_separated?: string })
+    | null = null;
+  let candidateId: string | null = null;
+  let candidateExtractionQueued = false;
+
+  try {
+    const extractedInfo = await extractCandidateInfo(content);
+    candidateInfo = {
+      firstName: extractedInfo.firstName,
+      lastName: extractedInfo.lastName,
+      lastInitial: extractedInfo.lastInitial,
+      email: extractedInfo.email,
+      phone: extractedInfo.phone,
+      skills: extractedInfo.skills,
+      skills_comma_separated: extractedInfo.skills_comma_separated,
+      experience: extractedInfo.experience,
+    };
+    console.log(
+      `Extracted candidate info for: ${candidateInfo.firstName} ${candidateInfo.lastName} from ${originalname}`
+    );
+
+    // Create candidate record
+    const candidate = await storage.createCandidate({
+      resumeId: resume.id,
+      firstName: candidateInfo.firstName,
+      lastName: candidateInfo.lastName,
+      lastInitial: candidateInfo.lastInitial,
+      email: candidateInfo.email,
+      phone: candidateInfo.phone,
+      skills: candidateInfo.skills,
+      experience: candidateInfo.experience,
+    });
+    candidateId = candidate.id;
+  } catch (error) {
+    if (isRateLimitError(error)) {
+      console.log(`Candidate extraction rate limited, adding to queue for resume ${resume.id}`);
+      await storage.addToCandidateExtractionQueue(resume.id);
+      candidateExtractionQueued = true;
+    } else {
+      throw error;
+    }
+  }
+
+  // Generate anonymized HTML
+  let publicResumeHtml: string | null = null;
+  let anonymizationQueued = false;
+
+  try {
+    publicResumeHtml = await anonymizeResumeAsHTML(content);
+    console.log(`Generated anonymized HTML resume for ${originalname}`);
+
+    // Update resume with anonymized HTML
+    await storage.updateResumeHtml(resume.id, publicResumeHtml);
+  } catch (error) {
+    if (isRateLimitError(error)) {
+      console.log(`Resume anonymization rate limited, adding to queue for resume ${resume.id}`);
+      await storage.addToResumeAnonymizationQueue(resume.id);
+      anonymizationQueued = true;
+    } else {
+      throw error;
+    }
+  }
+
+  // Determine status
+  let status: "completed" | "failed" | "skipped" = "completed";
+  if (candidateExtractionQueued && anonymizationQueued) {
+    status = "completed"; // Still return completed even if queued
+  } else if (candidateExtractionQueued || anonymizationQueued) {
+    status = "completed"; // Still return completed even if partially queued
+  }
 
   return {
     resumeId: resume.id,
-    candidateId: candidate.id,
-    candidateInfo: candidateInfo,
+    candidateId: candidateId || undefined,
+    candidateInfo: candidateInfo || undefined,
     fileName: originalname,
     resumePlainText: content,
-    publicResumeHtml: publicResumeHtml,
-    status: "completed",
+    publicResumeHtml: publicResumeHtml || undefined,
+    status,
     fileIndex: index + 1,
   };
 }

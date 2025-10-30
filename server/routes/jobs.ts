@@ -3,6 +3,7 @@ import { insertJobDescriptionSchema } from "@shared/schemas";
 import { storage } from "../storage";
 import { analyzeJobDescriptionWithAI } from "../services/jobs";
 import { generateTextHash } from "../services/lib/hash";
+import { isRateLimitError } from "../services/lib/llmRetry";
 
 const router = Router();
 
@@ -61,6 +62,16 @@ router.post("/api/job-descriptions/:id/analyze", async (req, res) => {
 
     res.json(updatedJobDesc);
   } catch (error) {
+    if (isRateLimitError(error)) {
+      // Add to queue for retry
+      const { id } = req.params;
+      await storage.addToJobAnalysisQueue(id);
+      return res.status(429).json({
+        message: "Rate limit exceeded, job analysis queued for retry",
+        status: "queued",
+        jobDescriptionId: id,
+      });
+    }
     res.status(500).json({ message: error instanceof Error ? error.message : "Unknown error" });
   }
 });

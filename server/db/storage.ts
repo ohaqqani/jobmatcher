@@ -1,4 +1,4 @@
-import { eq, and } from "drizzle-orm";
+import { eq, and, lte, inArray, or, isNull } from "drizzle-orm";
 import {
   type Candidate,
   type CandidateWithMatch,
@@ -13,6 +13,10 @@ import {
   resumes,
   candidates,
   matchResults,
+  candidateExtractionQueue,
+  resumeAnonymizationQueue,
+  jobAnalysisQueue,
+  matchProcessingQueue,
 } from "@shared/schemas";
 import { db } from "./index";
 import type { IStorage } from "../storage";
@@ -62,10 +66,7 @@ export class PostgresStorage implements IStorage {
 
   async getResumesByIds(ids: string[]): Promise<Resume[]> {
     if (ids.length === 0) return [];
-    const results = await db.select().from(resumes).where(eq(resumes.id, ids[0]));
-    // For multiple IDs, we'd need to use an IN clause
-    // But for now, this handles the basic case
-    return results;
+    return await db.select().from(resumes).where(inArray(resumes.id, ids));
   }
 
   async getResumeByHash(hash: string): Promise<Resume | undefined> {
@@ -90,9 +91,7 @@ export class PostgresStorage implements IStorage {
 
   async getCandidatesByResumeIds(resumeIds: string[]): Promise<Candidate[]> {
     if (resumeIds.length === 0) return [];
-    const results = await db.select().from(candidates).where(eq(candidates.resumeId, resumeIds[0]));
-    // For multiple IDs, we'd need to use an IN clause
-    return results;
+    return await db.select().from(candidates).where(inArray(candidates.resumeId, resumeIds));
   }
 
   async getCandidateByResumeId(resumeId: string): Promise<Candidate | undefined> {
@@ -154,5 +153,219 @@ export class PostgresStorage implements IStorage {
         )
       );
     return result;
+  }
+
+  // Queue methods for rate limit retry logic
+
+  async addToCandidateExtractionQueue(resumeId: string): Promise<void> {
+    await db
+      .insert(candidateExtractionQueue)
+      .values({ resumeId })
+      .onConflictDoUpdate({
+        target: candidateExtractionQueue.resumeId,
+        set: { status: "pending", attemptCount: 0, nextRetryAt: null, lastError: null },
+      });
+  }
+
+  async addToResumeAnonymizationQueue(resumeId: string): Promise<void> {
+    await db
+      .insert(resumeAnonymizationQueue)
+      .values({ resumeId })
+      .onConflictDoUpdate({
+        target: resumeAnonymizationQueue.resumeId,
+        set: { status: "pending", attemptCount: 0, nextRetryAt: null, lastError: null },
+      });
+  }
+
+  async addToJobAnalysisQueue(jobDescriptionId: string): Promise<void> {
+    await db
+      .insert(jobAnalysisQueue)
+      .values({ jobDescriptionId })
+      .onConflictDoUpdate({
+        target: jobAnalysisQueue.jobDescriptionId,
+        set: { status: "pending", attemptCount: 0, nextRetryAt: null, lastError: null },
+      });
+  }
+
+  async addToMatchQueue(candidateId: string, jobDescriptionId: string): Promise<void> {
+    await db
+      .insert(matchProcessingQueue)
+      .values({ candidateId, jobDescriptionId })
+      .onConflictDoUpdate({
+        target: [matchProcessingQueue.candidateId, matchProcessingQueue.jobDescriptionId],
+        set: { status: "pending", attemptCount: 0, nextRetryAt: null, lastError: null },
+      });
+  }
+
+  async getRetryableCandidateExtractionJobs(limit?: number) {
+    const now = new Date().toISOString();
+    const query = db
+      .select()
+      .from(candidateExtractionQueue)
+      .where(
+        and(
+          eq(candidateExtractionQueue.status, "pending"),
+          or(
+            isNull(candidateExtractionQueue.nextRetryAt),
+            lte(candidateExtractionQueue.nextRetryAt, now)
+          )
+        )
+      );
+
+    if (limit !== undefined) {
+      return await query.limit(limit);
+    }
+
+    return await query;
+  }
+
+  async getRetryableResumeAnonymizationJobs(limit?: number) {
+    const now = new Date().toISOString();
+    const query = db
+      .select()
+      .from(resumeAnonymizationQueue)
+      .where(
+        and(
+          eq(resumeAnonymizationQueue.status, "pending"),
+          or(
+            isNull(resumeAnonymizationQueue.nextRetryAt),
+            lte(resumeAnonymizationQueue.nextRetryAt, now)
+          )
+        )
+      );
+
+    if (limit !== undefined) {
+      return await query.limit(limit);
+    }
+
+    return await query;
+  }
+
+  async getRetryableJobAnalysisJobs(limit?: number) {
+    const now = new Date().toISOString();
+    const query = db
+      .select()
+      .from(jobAnalysisQueue)
+      .where(
+        and(
+          eq(jobAnalysisQueue.status, "pending"),
+          or(isNull(jobAnalysisQueue.nextRetryAt), lte(jobAnalysisQueue.nextRetryAt, now))
+        )
+      );
+
+    if (limit !== undefined) {
+      return await query.limit(limit);
+    }
+
+    return await query;
+  }
+
+  async getRetryableMatchJobs(limit?: number) {
+    const now = new Date().toISOString();
+    const query = db
+      .select()
+      .from(matchProcessingQueue)
+      .where(
+        and(
+          eq(matchProcessingQueue.status, "pending"),
+          or(isNull(matchProcessingQueue.nextRetryAt), lte(matchProcessingQueue.nextRetryAt, now))
+        )
+      );
+
+    if (limit !== undefined) {
+      return await query.limit(limit);
+    }
+
+    return await query;
+  }
+
+  async incrementCandidateExtractionRetry(
+    id: string,
+    error: string,
+    nextRetryAt: string
+  ): Promise<void> {
+    const [current] = await db
+      .select()
+      .from(candidateExtractionQueue)
+      .where(eq(candidateExtractionQueue.id, id));
+    await db
+      .update(candidateExtractionQueue)
+      .set({
+        attemptCount: (current?.attemptCount || 0) + 1,
+        lastError: error,
+        nextRetryAt: nextRetryAt,
+      })
+      .where(eq(candidateExtractionQueue.id, id));
+  }
+
+  async incrementResumeAnonymizationRetry(
+    id: string,
+    error: string,
+    nextRetryAt: string
+  ): Promise<void> {
+    const [current] = await db
+      .select()
+      .from(resumeAnonymizationQueue)
+      .where(eq(resumeAnonymizationQueue.id, id));
+    await db
+      .update(resumeAnonymizationQueue)
+      .set({
+        attemptCount: (current?.attemptCount || 0) + 1,
+        lastError: error,
+        nextRetryAt: nextRetryAt,
+      })
+      .where(eq(resumeAnonymizationQueue.id, id));
+  }
+
+  async incrementJobAnalysisRetry(id: string, error: string, nextRetryAt: string): Promise<void> {
+    const [current] = await db.select().from(jobAnalysisQueue).where(eq(jobAnalysisQueue.id, id));
+    await db
+      .update(jobAnalysisQueue)
+      .set({
+        attemptCount: (current?.attemptCount || 0) + 1,
+        lastError: error,
+        nextRetryAt: nextRetryAt,
+      })
+      .where(eq(jobAnalysisQueue.id, id));
+  }
+
+  async incrementMatchRetry(id: string, error: string, nextRetryAt: string): Promise<void> {
+    const [current] = await db
+      .select()
+      .from(matchProcessingQueue)
+      .where(eq(matchProcessingQueue.id, id));
+    await db
+      .update(matchProcessingQueue)
+      .set({
+        attemptCount: (current?.attemptCount || 0) + 1,
+        lastError: error,
+        nextRetryAt: nextRetryAt,
+      })
+      .where(eq(matchProcessingQueue.id, id));
+  }
+
+  async completeCandidateExtractionJob(id: string): Promise<void> {
+    await db.delete(candidateExtractionQueue).where(eq(candidateExtractionQueue.id, id));
+  }
+
+  async completeResumeAnonymizationJob(id: string): Promise<void> {
+    await db.delete(resumeAnonymizationQueue).where(eq(resumeAnonymizationQueue.id, id));
+  }
+
+  async completeJobAnalysisJob(id: string): Promise<void> {
+    await db.delete(jobAnalysisQueue).where(eq(jobAnalysisQueue.id, id));
+  }
+
+  async completeMatchJob(id: string): Promise<void> {
+    await db.delete(matchProcessingQueue).where(eq(matchProcessingQueue.id, id));
+  }
+
+  async updateResumeHtml(resumeId: string, html: string): Promise<Resume> {
+    const [updated] = await db
+      .update(resumes)
+      .set({ publicResumeHtml: html })
+      .where(eq(resumes.id, resumeId))
+      .returning();
+    return updated;
   }
 }

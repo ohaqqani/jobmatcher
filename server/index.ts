@@ -1,6 +1,23 @@
+import dotenv from "dotenv";
 import express, { NextFunction, type Request, Response } from "express";
 import { registerRoutes } from "./routes/index";
 import { log, serveStatic, setupVite } from "./vite";
+import {
+  startCandidateExtractionWorker,
+  stopCandidateExtractionWorker,
+} from "./workers/candidateExtractionWorker";
+import { startJobAnalysisWorker, stopJobAnalysisWorker } from "./workers/jobAnalysisWorker";
+import {
+  startMatchProcessingWorker,
+  stopMatchProcessingWorker,
+} from "./workers/matchProcessingWorker";
+import {
+  startResumeAnonymizationWorker,
+  stopResumeAnonymizationWorker,
+} from "./workers/resumeAnonymizationWorker";
+
+// Load environment variables from .env file
+dotenv.config();
 
 const app = express();
 app.use(express.json({ limit: "600mb" }));
@@ -77,7 +94,41 @@ app.use((req, res, next) => {
   server.listen(port, "0.0.0.0", () => {
     console.log(`Server running on port ${port} in ${process.env.NODE_ENV || "development"} mode`);
     log(`Server running on port ${port} in ${process.env.NODE_ENV || "development"} mode`);
+
+    // Start background workers for rate limit retry queue processing
+    console.log("Starting background workers...");
+    startCandidateExtractionWorker();
+    startResumeAnonymizationWorker();
+    startJobAnalysisWorker();
+    startMatchProcessingWorker();
+    console.log("Background workers started successfully");
   });
+
+  // Graceful shutdown handling
+  const shutdown = (signal: string) => {
+    console.log(`\n${signal} received, shutting down gracefully...`);
+
+    // Stop all workers
+    stopCandidateExtractionWorker();
+    stopResumeAnonymizationWorker();
+    stopJobAnalysisWorker();
+    stopMatchProcessingWorker();
+
+    // Close server
+    server.close(() => {
+      console.log("Server closed");
+      process.exit(0);
+    });
+
+    // Force shutdown after 10 seconds
+    setTimeout(() => {
+      console.error("Forcing shutdown after timeout");
+      process.exit(1);
+    }, 10000);
+  };
+
+  process.on("SIGTERM", () => shutdown("SIGTERM"));
+  process.on("SIGINT", () => shutdown("SIGINT"));
 })().catch((error) => {
   console.error("Failed to start server:", error);
   process.exit(1);

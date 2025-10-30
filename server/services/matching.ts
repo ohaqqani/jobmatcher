@@ -1,4 +1,5 @@
 import { openai } from "./lib/openai";
+import { retryWithBackoff, shouldSimulateRateLimit, RateLimitError } from "./lib/llmRetry";
 
 /**
  * Calculate match score between candidate and job using AI
@@ -102,9 +103,16 @@ ${resumeContent ? `ADDITIONAL CONTEXT FROM RESUME:\n${resumeContent}...` : ""}
 
 Please assess this candidate's potential for success in this role using fuzzy matching and predictive analysis. Return your assessment in JSON format.`;
 
-    const response = await openai.chat.completions.create({
-      model: "gpt-4.1",
-      messages: [{ role: "user", content: inputPrompt }],
+    const response = await retryWithBackoff(() => {
+      // Simulate rate limit for testing if enabled
+      if (shouldSimulateRateLimit()) {
+        throw new RateLimitError("Simulated rate limit for testing");
+      }
+
+      return openai.chat.completions.create({
+        model: "gpt-4.1",
+        messages: [{ role: "user", content: inputPrompt }],
+      });
     });
 
     const result = JSON.parse(response.choices[0].message.content || "{}");
@@ -119,12 +127,8 @@ Please assess this candidate's potential for success in this role using fuzzy ma
       analysis: result.analysis || "No analysis available",
     };
   } catch (error) {
+    // For rate limit errors, throw them up to be caught by route handlers
     console.error("Failed to calculate match score:", error);
-    return {
-      score: 0,
-      scorecard: {},
-      matchingSkills: [],
-      analysis: "Failed to calculate match score due to AI service error",
-    };
+    throw error;
   }
 }

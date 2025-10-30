@@ -3,6 +3,7 @@ import { Router } from "express";
 import { calculateMatchScore } from "../services/matching";
 import { storage } from "../storage";
 import { generateTextHash } from "../services/lib/hash";
+import { isRateLimitError } from "../services/lib/llmRetry";
 
 const router = Router();
 
@@ -28,11 +29,16 @@ router.post("/api/job-descriptions/:jobId/match", async (req, res) => {
 
     console.log(`Processing candidate matching in parallel for ${candidates.length} candidates...`);
 
+    // Batch fetch all resumes at once for performance
+    const candidateResumeIds = candidates.map((c) => c.resumeId);
+    const resumes = await storage.getResumesByIds(candidateResumeIds);
+    const resumeMap = new Map(resumes.map((r) => [r.id, r]));
+
     // Process all candidates concurrently
     const candidatePromises = candidates.map(async (candidate) => {
       try {
-        // Get resume to access content hash
-        const resume = await storage.getResume(candidate.resumeId);
+        // Get resume from pre-fetched map
+        const resume = resumeMap.get(candidate.resumeId);
         if (!resume) {
           throw new Error(`Resume not found for candidate ${candidate.id}`);
         }
@@ -89,6 +95,21 @@ router.post("/api/job-descriptions/:jobId/match", async (req, res) => {
 
         return matchResult;
       } catch (error) {
+        if (isRateLimitError(error)) {
+          console.log(
+            `Match calculation rate limited for candidate ${candidate.id}, adding to queue`
+          );
+          // Add to queue for retry
+          await storage.addToMatchQueue(candidate.id, jobId);
+          return {
+            jobDescriptionId: jobId,
+            candidateId: candidate.id,
+            matchScore: null,
+            status: "queued",
+            message: "Rate limited, queued for retry",
+          };
+        }
+
         console.error(
           `Failed to process match for candidate ${candidate.firstName} ${candidate.lastName}:`,
           error
