@@ -1,5 +1,5 @@
-import { Router } from "express";
 import type { InsertCandidate } from "@shared/schemas";
+import { Router } from "express";
 import {
   anonymizeResumeAsHTML,
   extractCandidateInfo,
@@ -7,9 +7,9 @@ import {
   extractTextFromFile,
 } from "../services/candidates";
 import { upload } from "../services/lib/fileUpload";
-import { storage } from "../storage";
 import { generateContentHash } from "../services/lib/hash";
 import { isRateLimitError } from "../services/lib/llmRetry";
+import { storage } from "../storage";
 
 const router = Router();
 
@@ -298,6 +298,22 @@ router.post("/api/resumes/upload", upload.array("file", CONFIG.MAX_FILES), async
 
     // Format and return response
     res.json(formatResponseSummary(results, allFiles.length));
+  } catch (error) {
+    res.status(500).json({ message: error instanceof Error ? error.message : "Unknown error" });
+  }
+});
+
+/**
+ * Get candidate by resume ID
+ */
+router.get("/api/candidates/:resumeId", async (req, res) => {
+  const { resumeId } = req.params;
+  try {
+    const candidate = await storage.getCandidateByResumeId(resumeId);
+    if (!candidate) {
+      return res.status(404).json({ message: "Candidate not found" });
+    }
+    res.json({ candidate });
   } catch (error) {
     res.status(500).json({ message: error instanceof Error ? error.message : "Unknown error" });
   }
