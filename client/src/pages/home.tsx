@@ -17,7 +17,13 @@ export default function Home() {
   const [uploadedResumes, setUploadedResumes] = useState<string[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingFiles, setProcessingFiles] = useState<ProcessingFile[]>([]);
-  const [isAnalyzingComplete, setIsAnalyzingComplete] = useState(false);
+  const [isAnalysisComplete, setIsAnalysisComplete] = useState(false);
+
+  const handleJobCreated = (jobId: string, _analysisStatus: "complete" | "queued") => {
+    setCurrentJobId(jobId);
+    // Analysis is complete immediately, or will be queued for background processing
+    setIsAnalysisComplete(true);
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50/30">
@@ -44,12 +50,8 @@ export default function Home() {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Top Section: Job Description and Resume Upload */}
         <div className="grid grid-cols-1 gap-8 mb-8">
-          <JobDescriptionForm
-            onJobCreated={setCurrentJobId}
-            currentJobId={currentJobId}
-            setIsAnalyzingComplete={setIsAnalyzingComplete}
-          />
-          {isAnalyzingComplete && (
+          <JobDescriptionForm onJobCreated={handleJobCreated} />
+          {isAnalysisComplete && (
             <ResumeUpload
               onFilesUploaded={setUploadedResumes}
               onProcessingUpdate={setProcessingFiles}

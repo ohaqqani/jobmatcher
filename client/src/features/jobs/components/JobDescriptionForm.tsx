@@ -12,25 +12,15 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Briefcase, Sparkles } from "lucide-react";
-import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { jobDescriptionSchema, type JobDescriptionForm } from "../schemas/jobSchema";
 import { useCreateJob } from "../hooks/useCreateJob";
-import { useAnalyzeJob } from "../hooks/useAnalyzeJob";
 
 interface JobDescriptionFormProps {
-  onJobCreated: (jobId: string) => void;
-  currentJobId: string | null;
-  setIsAnalyzingComplete: (isComplete: boolean) => void;
+  onJobCreated: (jobId: string, analysisStatus: "complete" | "queued") => void;
 }
 
-export default function JobDescriptionFormComponent({
-  onJobCreated,
-  currentJobId,
-  setIsAnalyzingComplete,
-}: JobDescriptionFormProps) {
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
-
+export default function JobDescriptionFormComponent({ onJobCreated }: JobDescriptionFormProps) {
   const form = useForm<JobDescriptionForm>({
     resolver: zodResolver(jobDescriptionSchema),
     defaultValues: {
@@ -40,26 +30,13 @@ export default function JobDescriptionFormComponent({
   });
 
   const createJobMutation = useCreateJob({
-    onSuccess: (jobDesc) => {
-      onJobCreated(jobDesc.id);
-    },
-  });
-
-  const analyzeJobMutation = useAnalyzeJob({
-    onSuccess: () => {
-      setIsAnalyzing(false);
-      setIsAnalyzingComplete(true);
+    onSuccess: (jobDesc, analysisStatus) => {
+      onJobCreated(jobDesc.id, analysisStatus);
     },
   });
 
   const onSubmit = (data: JobDescriptionForm) => {
     createJobMutation.mutate(data);
-  };
-
-  const handleAnalyze = () => {
-    if (!currentJobId) return;
-    setIsAnalyzing(true);
-    analyzeJobMutation.mutate(currentJobId);
   };
 
   return (
@@ -113,44 +90,23 @@ export default function JobDescriptionFormComponent({
               )}
             />
 
-            {!currentJobId ? (
-              <Button
-                type="submit"
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold shadow-md hover:shadow-lg transition-all duration-200"
-                disabled={createJobMutation.isPending}
-              >
-                {createJobMutation.isPending ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
-                    Creating...
-                  </>
-                ) : (
-                  <>
-                    <Briefcase className="mr-2 h-4 w-4" />
-                    Save Job Description
-                  </>
-                )}
-              </Button>
-            ) : (
-              <Button
-                type="button"
-                onClick={handleAnalyze}
-                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold shadow-md hover:shadow-lg transition-all duration-200"
-                disabled={isAnalyzing || analyzeJobMutation.isPending}
-              >
-                {isAnalyzing || analyzeJobMutation.isPending ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
-                    Analyzing...
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="mr-2 h-4 w-4" />
-                    Analyze Job Requirements
-                  </>
-                )}
-              </Button>
-            )}
+            <Button
+              type="submit"
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold shadow-md hover:shadow-lg transition-all duration-200"
+              disabled={createJobMutation.isPending}
+            >
+              {createJobMutation.isPending ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
+                  Creating & Analyzing...
+                </>
+              ) : (
+                <>
+                  <Sparkles className="mr-2 h-4 w-4" />
+                  Save & Analyze Job Description
+                </>
+              )}
+            </Button>
           </form>
         </Form>
       </CardContent>

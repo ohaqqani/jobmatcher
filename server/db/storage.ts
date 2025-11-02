@@ -1,4 +1,4 @@
-import { eq, and, lte, inArray, or, isNull } from "drizzle-orm";
+import { eq, and, lte, inArray, or, isNull, sql } from "drizzle-orm";
 import {
   type Candidate,
   type CandidateWithMatch,
@@ -153,6 +153,32 @@ export class PostgresStorage implements IStorage {
         )
       );
     return result;
+  }
+
+  /**
+   * Batch fetch match results for multiple (resume_hash, job_hash) pairs
+   * Uses PostgreSQL row value comparison for optimal composite index utilization
+   *
+   * @param pairs - Array of {resumeHash, jobHash} objects to query
+   * @returns Array of MatchResult objects that exist in the database
+   */
+  async getMatchResultsByHashPairs(
+    pairs: Array<{ resumeHash: string; jobHash: string }>
+  ): Promise<MatchResult[]> {
+    if (pairs.length === 0) return [];
+
+    // Build parameterized query using sql.join for safety
+    // This creates: WHERE (resume_content_hash, job_content_hash) IN ((?, ?), (?, ?), ...)
+    const conditions = pairs.map((pair) => sql`(${pair.resumeHash}, ${pair.jobHash})`);
+
+    const results = await db
+      .select()
+      .from(matchResults)
+      .where(
+        sql`(${matchResults.resumeContentHash}, ${matchResults.jobContentHash}) IN (${sql.join(conditions, sql`, `)})`
+      );
+
+    return results;
   }
 
   // Queue methods for rate limit retry logic

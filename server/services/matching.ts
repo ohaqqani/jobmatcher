@@ -110,8 +110,9 @@ Please assess this candidate's potential for success in this role using fuzzy ma
       }
 
       return openai.chat.completions.create({
-        model: "gpt-4.1",
+        model: "gpt-5",
         messages: [{ role: "user", content: inputPrompt }],
+        reasoning_effort: "minimal",
       });
     });
 

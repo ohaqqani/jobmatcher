@@ -13,19 +13,20 @@ export interface JobDescription {
   analyzedAt: Date;
 }
 
-/**
- * Create a new job description
- */
-export async function createJob(data: CreateJobData): Promise<JobDescription> {
-  const response = await apiRequest("POST", "/api/job-descriptions", data);
-  return response.json();
+export interface CreateJobResponse {
+  job: JobDescription;
+  analysisStatus: "complete" | "queued";
+  message?: string;
 }
 
 /**
- * Analyze job description with AI to extract required skills
+ * Create a new job description and analyze it with AI
+ * Returns the job description along with analysis status.
+ * If analysis is queued due to rate limits, the job is still created
+ * and will be analyzed automatically by background workers.
  */
-export async function analyzeJob(jobId: string): Promise<JobDescription> {
-  const response = await apiRequest("POST", `/api/job-descriptions/${jobId}/analyze`);
+export async function createJob(data: CreateJobData): Promise<CreateJobResponse> {
+  const response = await apiRequest("POST", "/api/job-descriptions", data);
   return response.json();
 }
 

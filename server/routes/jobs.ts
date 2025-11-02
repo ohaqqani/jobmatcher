@@ -8,7 +8,9 @@ import { isRateLimitError } from "../services/lib/llmRetry";
 const router = Router();
 
 /**
- * Create job description
+ * Create and analyze job description
+ * This endpoint creates a job description and immediately analyzes it with AI.
+ * Returns consistent response structure with analysis status.
  */
 router.post("/api/job-descriptions", async (req, res) => {
   try {
@@ -23,56 +25,62 @@ router.post("/api/job-descriptions", async (req, res) => {
     console.log(`Generated job description hash: ${contentHash.substring(0, 16)}...`);
 
     // Check if this exact job description already exists
-    const existingJobDesc = await storage.getJobDescriptionByHash(contentHash);
-    if (existingJobDesc) {
-      console.log(
-        `Duplicate job description detected, returning existing record: ${existingJobDesc.id}`
-      );
-      return res.json(existingJobDesc);
+    let jobDesc = await storage.getJobDescriptionByHash(contentHash);
+    if (jobDesc) {
+      console.log(`Duplicate job description detected, found existing record: ${jobDesc.id}`);
+
+      // If duplicate has already been analyzed, return it immediately
+      if (jobDesc.requiredSkills && jobDesc.requiredSkills.length > 0) {
+        console.log(`Job already analyzed with ${jobDesc.requiredSkills.length} skills`);
+        return res.json({
+          job: jobDesc,
+          analysisStatus: "complete",
+        });
+      }
+
+      // If duplicate hasn't been analyzed yet, analyze it now
+      console.log(`Job needs analysis, analyzing now...`);
+    } else {
+      // Validate and create new job description with normalized values
+      const validatedData = insertJobDescriptionSchema.parse({
+        contentHash,
+        title: normalizedTitle,
+        description: normalizedDescription,
+      });
+      jobDesc = await storage.createJobDescription(validatedData);
+      console.log(`Created new job description: ${jobDesc.id}`);
     }
 
-    // Validate and create new job description with normalized values
-    const validatedData = insertJobDescriptionSchema.parse({
-      contentHash,
-      title: normalizedTitle,
-      description: normalizedDescription,
-    });
-    const jobDesc = await storage.createJobDescription(validatedData);
-    console.log(`Created new job description: ${jobDesc.id}`);
-    res.json(jobDesc);
+    // Analyze the job description
+    try {
+      const requiredSkills = await analyzeJobDescriptionWithAI(
+        normalizedTitle,
+        normalizedDescription
+      );
+      const analyzedJobDesc = await storage.analyzeJobDescription(jobDesc.id, requiredSkills);
+      console.log(`Successfully analyzed job with ${requiredSkills.length} skills`);
+
+      return res.json({
+        job: analyzedJobDesc,
+        analysisStatus: "complete",
+      });
+    } catch (error) {
+      if (isRateLimitError(error)) {
+        // Add to queue for retry
+        console.log(`Rate limit hit, queueing job ${jobDesc.id} for analysis`);
+        await storage.addToJobAnalysisQueue(jobDesc.id);
+        return res.json({
+          job: jobDesc,
+          analysisStatus: "queued",
+          message:
+            "Job created successfully! Analysis is queued due to high demand and will complete automatically within a few minutes.",
+        });
+      }
+      // Re-throw other errors to be caught by outer catch block
+      throw error;
+    }
   } catch (error) {
     res.status(400).json({ message: error instanceof Error ? error.message : "Unknown error" });
-  }
-});
-
-/**
- * Analyze job description with AI
- */
-router.post("/api/job-descriptions/:id/analyze", async (req, res) => {
-  try {
-    const { id } = req.params;
-    const jobDesc = await storage.getJobDescription(id);
-
-    if (!jobDesc) {
-      return res.status(404).json({ message: "Job description not found" });
-    }
-
-    const requiredSkills = await analyzeJobDescriptionWithAI(jobDesc.title, jobDesc.description);
-    const updatedJobDesc = await storage.analyzeJobDescription(id, requiredSkills);
-
-    res.json(updatedJobDesc);
-  } catch (error) {
-    if (isRateLimitError(error)) {
-      // Add to queue for retry
-      const { id } = req.params;
-      await storage.addToJobAnalysisQueue(id);
-      return res.status(429).json({
-        message: "Rate limit exceeded, job analysis queued for retry",
-        status: "queued",
-        jobDescriptionId: id,
-      });
-    }
-    res.status(500).json({ message: error instanceof Error ? error.message : "Unknown error" });
   }
 });
 

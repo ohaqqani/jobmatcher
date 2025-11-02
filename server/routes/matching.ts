@@ -34,6 +34,27 @@ router.post("/api/job-descriptions/:jobId/match", async (req, res) => {
     const resumes = await storage.getResumesByIds(candidateResumeIds);
     const resumeMap = new Map(resumes.map((r) => [r.id, r]));
 
+    // Batch fetch all existing matches at once for performance
+    const hashPairs = candidates.map((candidate) => {
+      const resume = resumeMap.get(candidate.resumeId);
+      if (!resume) {
+        throw new Error(`Resume not found for candidate ${candidate.id}`);
+      }
+      return {
+        resumeHash: resume.contentHash,
+        jobHash: jobDesc.contentHash,
+      };
+    });
+
+    const existingMatches = await storage.getMatchResultsByHashPairs(hashPairs);
+    const matchMap = new Map(
+      existingMatches.map((m) => [`${m.resumeContentHash}:${m.jobContentHash}`, m])
+    );
+
+    console.log(
+      `Found ${existingMatches.length} existing matches, will calculate ${candidates.length - existingMatches.length} new matches`
+    );
+
     // Process all candidates concurrently
     const candidatePromises = candidates.map(async (candidate) => {
       try {
@@ -43,11 +64,9 @@ router.post("/api/job-descriptions/:jobId/match", async (req, res) => {
           throw new Error(`Resume not found for candidate ${candidate.id}`);
         }
 
-        // Check if match already exists by content hashes
-        const existingMatch = await storage.getMatchResultByHashes(
-          resume.contentHash,
-          jobDesc.contentHash
-        );
+        // Check if match already exists using pre-fetched map
+        const matchKey = `${resume.contentHash}:${jobDesc.contentHash}`;
+        const existingMatch = matchMap.get(matchKey);
 
         if (existingMatch) {
           console.log(

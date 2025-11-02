@@ -35,6 +35,9 @@ export interface IStorage {
   getMatchResultsByJobId(jobId: string): Promise<CandidateWithMatch[]>;
   getMatchResult(candidateId: string, jobId: string): Promise<MatchResult | undefined>;
   getMatchResultByHashes(resumeHash: string, jobHash: string): Promise<MatchResult | undefined>;
+  getMatchResultsByHashPairs(
+    pairs: Array<{ resumeHash: string; jobHash: string }>
+  ): Promise<MatchResult[]>;
 }
 
 export const storage = new PostgresStorage();

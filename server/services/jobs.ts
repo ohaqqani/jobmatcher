@@ -36,8 +36,9 @@ Extract all relevant skills and requirements for this position. Focus on skills 
       }
 
       return openai.chat.completions.create({
-        model: "gpt-4.1-nano",
+        model: "gpt-5-nano",
         messages: [{ role: "user", content: inputPrompt }],
+        reasoning_effort: "minimal",
       });
     });
 

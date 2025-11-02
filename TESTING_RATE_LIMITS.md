@@ -196,7 +196,9 @@ FROM resumes;
 SIMULATE_RATE_LIMIT=true npm run dev
 ```
 
-### Create a Job Description
+### Create and Analyze a Job Description
+
+Note: Job creation now automatically triggers analysis in a single request.
 
 ```bash
 curl -X POST http://localhost:3000/api/job-descriptions \
@@ -207,35 +209,47 @@ curl -X POST http://localhost:3000/api/job-descriptions \
   }'
 ```
 
-### Expected Response
+### Expected Response (When Rate Limited)
 
 ```json
 {
-  "id": "job-uuid",
-  "title": "Senior Full Stack Engineer",
-  "description": "...",
-  "requiredSkills": [],
-  "contentHash": "hash-value",
-  "analyzedAt": "timestamp"
+  "job": {
+    "id": "job-uuid",
+    "title": "Senior Full Stack Engineer",
+    "description": "...",
+    "requiredSkills": [],
+    "contentHash": "hash-value",
+    "analyzedAt": "timestamp"
+  },
+  "analysisStatus": "queued",
+  "message": "Job created successfully! Analysis is queued due to high demand and will complete automatically within a few minutes."
 }
 ```
 
-Job is created, but `requiredSkills` is empty.
+Job is created, but `requiredSkills` is empty and analysis is queued.
 
-### Analyze the Job (Will Be Queued)
-
-```bash
-# Replace {id} with the actual job ID from above
-curl -X POST http://localhost:3000/api/job-descriptions/{id}/analyze
-```
-
-### Expected Response
+### Expected Response (Without Rate Limit)
 
 ```json
 {
-  "message": "Rate limit exceeded, job analysis queued for retry",
-  "status": "queued",
-  "jobDescriptionId": "job-uuid"
+  "job": {
+    "id": "job-uuid",
+    "title": "Senior Full Stack Engineer",
+    "description": "...",
+    "requiredSkills": [
+      "React",
+      "Node.js",
+      "TypeScript",
+      "PostgreSQL",
+      "AWS",
+      "Docker",
+      "Agile",
+      "Leadership"
+    ],
+    "contentHash": "hash-value",
+    "analyzedAt": "timestamp"
+  },
+  "analysisStatus": "complete"
 }
 ```
 
