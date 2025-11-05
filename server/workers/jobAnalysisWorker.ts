@@ -1,6 +1,7 @@
 import { storage } from "../storage";
 import { analyzeJobDescriptionWithAI } from "../services/jobs";
 import { calculateNextRetry } from "../services/lib/llmRetry";
+import { logger } from "../lib/logger";
 
 const POLL_INTERVAL_MS = 10000; // 10 seconds
 const MAX_RETRIES = 3;
@@ -13,7 +14,7 @@ let intervalId: NodeJS.Timeout | null = null;
  */
 async function processQueueItems() {
   if (isRunning) {
-    console.log("Job analysis worker already running, skipping");
+    logger.debug("Job analysis worker already running, skipping");
     return;
   }
 
@@ -27,7 +28,7 @@ async function processQueueItems() {
       return;
     }
 
-    console.log(`Processing ${items.length} job analysis queue items in parallel`);
+    logger.info(`Processing ${items.length} job analysis queue items in parallel`);
 
     // Process all items in parallel
     const results = await Promise.all(
@@ -37,14 +38,14 @@ async function processQueueItems() {
           const job = await storage.getJobDescription(item.jobDescriptionId);
 
           if (!job) {
-            console.error(
+            logger.error(
               `Job description ${item.jobDescriptionId} not found, removing from queue`
             );
             await storage.completeJobAnalysisJob(item.id);
             return { status: "removed", itemId: item.id };
           }
 
-          console.log(
+          logger.debug(
             `Retrying job analysis for job ${job.id} (attempt ${item.attemptCount + 1}/${MAX_RETRIES})`
           );
 
@@ -54,20 +55,20 @@ async function processQueueItems() {
           // Update job with analyzed skills
           await storage.analyzeJobDescription(job.id, requiredSkills);
 
-          console.log(`Successfully analyzed job ${job.id}, found ${requiredSkills.length} skills`);
+          logger.info(`Successfully analyzed job ${job.id}, found ${requiredSkills.length} skills`);
 
           // Remove from queue
           await storage.completeJobAnalysisJob(item.id);
           return { status: "success", itemId: item.id };
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : "Unknown error";
-          console.error(`Failed to process job analysis queue item ${item.id}:`, errorMessage);
+          logger.error(`Failed to process job analysis queue item ${item.id}:`, errorMessage);
 
           // Increment attempt count
           const newAttemptCount = item.attemptCount + 1;
 
           if (newAttemptCount >= MAX_RETRIES) {
-            console.error(
+            logger.error(
               `Max retries exceeded for job analysis queue item ${item.id}, keeping in queue with failed status`
             );
             // Keep in queue but mark as failed by setting a far-future retry time
@@ -90,7 +91,7 @@ async function processQueueItems() {
     const failed = results.filter((r) => r.status === "failed").length;
     const removed = results.filter((r) => r.status === "removed").length;
 
-    console.log(
+    logger.info(
       `Job analysis batch complete: ${succeeded} succeeded, ${requeued} requeued, ${failed} failed, ${removed} removed`
     );
   } finally {
@@ -102,7 +103,7 @@ async function processQueueItems() {
  * Start the job analysis queue worker
  */
 export function startJobAnalysisWorker() {
-  console.log("Starting job analysis queue worker");
+  logger.info("Starting job analysis queue worker");
 
   // Process immediately on start
   processQueueItems();
@@ -117,7 +118,7 @@ export function startJobAnalysisWorker() {
  * Stop the job analysis queue worker
  */
 export function stopJobAnalysisWorker() {
-  console.log("Stopping job analysis queue worker");
+  logger.info("Stopping job analysis queue worker");
 
   if (intervalId) {
     clearInterval(intervalId);

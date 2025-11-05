@@ -1,6 +1,7 @@
 import { storage } from "../storage";
 import { extractCandidateInfo } from "../services/candidates";
 import { calculateNextRetry } from "../services/lib/llmRetry";
+import { logger } from "../lib/logger";
 
 const POLL_INTERVAL_MS = 10000; // 10 seconds
 const MAX_RETRIES = 3;
@@ -13,7 +14,7 @@ let intervalId: NodeJS.Timeout | null = null;
  */
 async function processQueueItems() {
   if (isRunning) {
-    console.log("Candidate extraction worker already running, skipping");
+    logger.debug("Candidate extraction worker already running, skipping");
     return;
   }
 
@@ -27,7 +28,7 @@ async function processQueueItems() {
       return;
     }
 
-    console.log(`Processing ${items.length} candidate extraction queue items in parallel`);
+    logger.info(`Processing ${items.length} candidate extraction queue items in parallel`);
 
     // Process all items in parallel
     const results = await Promise.all(
@@ -37,12 +38,12 @@ async function processQueueItems() {
           const resume = await storage.getResume(item.resumeId);
 
           if (!resume) {
-            console.error(`Resume ${item.resumeId} not found, removing from queue`);
+            logger.error(`Resume ${item.resumeId} not found, removing from queue`);
             await storage.completeCandidateExtractionJob(item.id);
             return { status: "removed", itemId: item.id };
           }
 
-          console.log(
+          logger.debug(
             `Retrying candidate extraction for resume ${resume.id} (attempt ${item.attemptCount + 1}/${MAX_RETRIES})`
           );
 
@@ -55,7 +56,7 @@ async function processQueueItems() {
             ...candidateInfo,
           });
 
-          console.log(
+          logger.info(
             `Successfully extracted candidate info for ${candidateInfo.firstName} ${candidateInfo.lastName}`
           );
 
@@ -64,7 +65,7 @@ async function processQueueItems() {
           return { status: "success", itemId: item.id };
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : "Unknown error";
-          console.error(
+          logger.error(
             `Failed to process candidate extraction queue item ${item.id}:`,
             errorMessage
           );
@@ -73,7 +74,7 @@ async function processQueueItems() {
           const newAttemptCount = item.attemptCount + 1;
 
           if (newAttemptCount >= MAX_RETRIES) {
-            console.error(
+            logger.error(
               `Max retries exceeded for candidate extraction queue item ${item.id}, keeping in queue with failed status`
             );
             // Keep in queue but mark as failed by setting a far-future retry time
@@ -100,7 +101,7 @@ async function processQueueItems() {
     const failed = results.filter((r) => r.status === "failed").length;
     const removed = results.filter((r) => r.status === "removed").length;
 
-    console.log(
+    logger.info(
       `Candidate extraction batch complete: ${succeeded} succeeded, ${requeued} requeued, ${failed} failed, ${removed} removed`
     );
   } finally {
@@ -112,7 +113,7 @@ async function processQueueItems() {
  * Start the candidate extraction queue worker
  */
 export function startCandidateExtractionWorker() {
-  console.log("Starting candidate extraction queue worker");
+  logger.info("Starting candidate extraction queue worker");
 
   // Process immediately on start
   processQueueItems();
@@ -127,7 +128,7 @@ export function startCandidateExtractionWorker() {
  * Stop the candidate extraction queue worker
  */
 export function stopCandidateExtractionWorker() {
-  console.log("Stopping candidate extraction queue worker");
+  logger.info("Stopping candidate extraction queue worker");
 
   if (intervalId) {
     clearInterval(intervalId);

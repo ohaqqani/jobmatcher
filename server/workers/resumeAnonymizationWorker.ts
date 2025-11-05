@@ -1,6 +1,7 @@
 import { storage } from "../storage";
 import { anonymizeResumeAsHTML } from "../services/candidates";
 import { calculateNextRetry } from "../services/lib/llmRetry";
+import { logger } from "../lib/logger";
 
 const POLL_INTERVAL_MS = 10000; // 10 seconds
 const MAX_RETRIES = 3;
@@ -13,7 +14,7 @@ let intervalId: NodeJS.Timeout | null = null;
  */
 async function processQueueItems() {
   if (isRunning) {
-    console.log("Resume anonymization worker already running, skipping");
+    logger.debug("Resume anonymization worker already running, skipping");
     return;
   }
 
@@ -27,7 +28,7 @@ async function processQueueItems() {
       return;
     }
 
-    console.log(`Processing ${items.length} resume anonymization queue items in parallel`);
+    logger.info(`Processing ${items.length} resume anonymization queue items in parallel`);
 
     // Process all items in parallel
     const results = await Promise.all(
@@ -37,12 +38,12 @@ async function processQueueItems() {
           const resume = await storage.getResume(item.resumeId);
 
           if (!resume) {
-            console.error(`Resume ${item.resumeId} not found, removing from queue`);
+            logger.error(`Resume ${item.resumeId} not found, removing from queue`);
             await storage.completeResumeAnonymizationJob(item.id);
             return { status: "removed", itemId: item.id };
           }
 
-          console.log(
+          logger.debug(
             `Retrying resume anonymization for resume ${resume.id} (attempt ${item.attemptCount + 1}/${MAX_RETRIES})`
           );
 
@@ -52,14 +53,14 @@ async function processQueueItems() {
           // Update resume with anonymized HTML
           await storage.updateResumeHtml(resume.id, publicResumeHtml);
 
-          console.log(`Successfully anonymized resume ${resume.id}`);
+          logger.info(`Successfully anonymized resume ${resume.id}`);
 
           // Remove from queue
           await storage.completeResumeAnonymizationJob(item.id);
           return { status: "success", itemId: item.id };
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : "Unknown error";
-          console.error(
+          logger.error(
             `Failed to process resume anonymization queue item ${item.id}:`,
             errorMessage
           );
@@ -68,7 +69,7 @@ async function processQueueItems() {
           const newAttemptCount = item.attemptCount + 1;
 
           if (newAttemptCount >= MAX_RETRIES) {
-            console.error(
+            logger.error(
               `Max retries exceeded for resume anonymization queue item ${item.id}, keeping in queue with failed status`
             );
             // Keep in queue but mark as failed by setting a far-future retry time
@@ -95,7 +96,7 @@ async function processQueueItems() {
     const failed = results.filter((r) => r.status === "failed").length;
     const removed = results.filter((r) => r.status === "removed").length;
 
-    console.log(
+    logger.info(
       `Resume anonymization batch complete: ${succeeded} succeeded, ${requeued} requeued, ${failed} failed, ${removed} removed`
     );
   } finally {
@@ -107,7 +108,7 @@ async function processQueueItems() {
  * Start the resume anonymization queue worker
  */
 export function startResumeAnonymizationWorker() {
-  console.log("Starting resume anonymization queue worker");
+  logger.info("Starting resume anonymization queue worker");
 
   // Process immediately on start
   processQueueItems();
@@ -122,7 +123,7 @@ export function startResumeAnonymizationWorker() {
  * Stop the resume anonymization queue worker
  */
 export function stopResumeAnonymizationWorker() {
-  console.log("Stopping resume anonymization queue worker");
+  logger.info("Stopping resume anonymization queue worker");
 
   if (intervalId) {
     clearInterval(intervalId);

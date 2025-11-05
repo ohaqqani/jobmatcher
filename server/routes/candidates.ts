@@ -10,6 +10,7 @@ import { upload } from "../services/lib/fileUpload";
 import { generateContentHash } from "../services/lib/hash";
 import { isRateLimitError } from "../services/lib/llmRetry";
 import { storage } from "../storage";
+import { logger } from "../lib/logger";
 
 const router = Router();
 
@@ -58,18 +59,18 @@ async function processResumeFile(
   index: number,
   totalFiles: number
 ): Promise<ProcessResult> {
-  console.log(
+  logger.debug(
     `Processing file ${index + 1}/${totalFiles}: ${originalname}, size: ${buffer.length}, type: ${mimetype}`
   );
 
   // Generate content hash for deduplication
   const contentHash = generateContentHash(buffer);
-  console.log(`Generated content hash: ${contentHash.substring(0, 16)}... for ${originalname}`);
+  logger.debug(`Generated content hash: ${contentHash.substring(0, 16)}... for ${originalname}`);
 
   // Check if this exact resume has been processed before
   const existingResume = await storage.getResumeByHash(contentHash);
   if (existingResume) {
-    console.log(`Duplicate resume detected for ${originalname}, skipping processing`);
+    logger.info(`Duplicate resume detected for ${originalname}, skipping processing`);
 
     // Retrieve existing candidate data
     const existingCandidate = await storage.getCandidateByResumeId(existingResume.id);
@@ -103,7 +104,7 @@ async function processResumeFile(
     CONFIG.PROCESSING_TIMEOUT_MS,
     "File processing timeout after 30 seconds"
   );
-  console.log(`Extracted text length: ${content.length} characters for ${originalname}`);
+  logger.debug(`Extracted text length: ${content.length} characters for ${originalname}`);
 
   // Create resume record first with content
   const resume = await storage.createResume({
@@ -115,15 +116,21 @@ async function processResumeFile(
     publicResumeHtml: null, // Will be updated when anonymization completes
   });
 
-  // Extract candidate information
+  // Run both LLM calls in parallel (they are independent operations)
+  const [extractionResult, anonymizationResult] = await Promise.allSettled([
+    extractCandidateInfo(content),
+    anonymizeResumeAsHTML(content),
+  ]);
+
+  // Process extraction result
   let candidateInfo:
     | (Omit<InsertCandidate, "resumeId"> & { skills_comma_separated?: string })
     | null = null;
   let candidateId: string | null = null;
   let candidateExtractionQueued = false;
 
-  try {
-    const extractedInfo = await extractCandidateInfo(content);
+  if (extractionResult.status === "fulfilled") {
+    const extractedInfo = extractionResult.value;
     candidateInfo = {
       firstName: extractedInfo.firstName,
       lastName: extractedInfo.lastName,
@@ -134,7 +141,7 @@ async function processResumeFile(
       skills_comma_separated: extractedInfo.skills_comma_separated,
       experience: extractedInfo.experience,
     };
-    console.log(
+    logger.info(
       `Extracted candidate info for: ${candidateInfo.firstName} ${candidateInfo.lastName} from ${originalname}`
     );
 
@@ -150,9 +157,10 @@ async function processResumeFile(
       experience: candidateInfo.experience,
     });
     candidateId = candidate.id;
-  } catch (error) {
+  } else {
+    const error = extractionResult.reason;
     if (isRateLimitError(error)) {
-      console.log(`Candidate extraction rate limited, adding to queue for resume ${resume.id}`);
+      logger.info(`Candidate extraction rate limited, adding to queue for resume ${resume.id}`);
       await storage.addToCandidateExtractionQueue(resume.id);
       candidateExtractionQueued = true;
     } else {
@@ -160,19 +168,20 @@ async function processResumeFile(
     }
   }
 
-  // Generate anonymized HTML
+  // Process anonymization result
   let publicResumeHtml: string | null = null;
   let anonymizationQueued = false;
 
-  try {
-    publicResumeHtml = await anonymizeResumeAsHTML(content);
-    console.log(`Generated anonymized HTML resume for ${originalname}`);
+  if (anonymizationResult.status === "fulfilled") {
+    publicResumeHtml = anonymizationResult.value;
+    logger.info(`Generated anonymized HTML resume for ${originalname}`);
 
     // Update resume with anonymized HTML
     await storage.updateResumeHtml(resume.id, publicResumeHtml);
-  } catch (error) {
+  } else {
+    const error = anonymizationResult.reason;
     if (isRateLimitError(error)) {
-      console.log(`Resume anonymization rate limited, adding to queue for resume ${resume.id}`);
+      logger.info(`Resume anonymization rate limited, adding to queue for resume ${resume.id}`);
       await storage.addToResumeAnonymizationQueue(resume.id);
       anonymizationQueued = true;
     } else {
@@ -213,7 +222,7 @@ async function processFileWithErrorHandling(
     return await processResumeFile(buffer, originalname, mimetype, index, totalFiles);
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
-    console.error(`Failed to process file ${originalname}:`, {
+    logger.error(`Failed to process file ${originalname}:`, {
       error: errorMessage,
       fileIndex: index + 1,
       fileName: originalname,
@@ -238,19 +247,19 @@ function formatResponseSummary(results: ProcessResult[], totalFiles: number) {
   const failedUploads = results.filter((r) => r.status === "failed");
   const skippedUploads = results.filter((r) => r.status === "skipped");
 
-  console.log(
+  logger.info(
     `Upload batch completed: ${successfulUploads.length} successful, ${skippedUploads.length} skipped (duplicates), ${failedUploads.length} failed out of ${totalFiles} total files`
   );
 
   if (failedUploads.length > 0) {
-    console.error(
+    logger.error(
       "Failed files:",
       failedUploads.map((f) => ({ fileName: f.fileName, error: f.error }))
     );
   }
 
   if (skippedUploads.length > 0) {
-    console.log(
+    logger.info(
       "Skipped duplicate files:",
       skippedUploads.map((f) => f.fileName)
     );
@@ -287,14 +296,14 @@ router.post("/api/resumes/upload", upload.array("file", CONFIG.MAX_FILES), async
         .json({ message: "No valid files found in upload (PDF, DOC, DOCX only)" });
     }
 
-    console.log(`Processing ${allFiles.length} files in parallel...`);
+    logger.info(`Processing ${allFiles.length} files in parallel...`);
 
     // Process all files in parallel
     const results = await Promise.all(
       allFiles.map((item, index) => processFileWithErrorHandling(item, index, allFiles.length))
     );
 
-    console.log(`Upload processing complete. Results: ${results.length} items`);
+    logger.info(`Upload processing complete. Results: ${results.length} items`);
 
     // Format and return response
     res.json(formatResponseSummary(results, allFiles.length));

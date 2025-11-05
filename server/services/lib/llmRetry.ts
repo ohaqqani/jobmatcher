@@ -131,10 +131,11 @@ export function calculateNextRetry(attemptCount: number, error?: unknown): Date 
 
 /**
  * Retry a function with exponential backoff on rate limit errors
+ * DOES NOT BLOCK on rate limits - immediately throws to allow caller to queue
  * @param fn The async function to retry
- * @param maxRetries Maximum number of retry attempts (default: 3)
+ * @param maxRetries Maximum number of retry attempts for non-rate-limit errors (default: 3)
  * @returns The result of the function
- * @throws RateLimitError if all retries are exhausted
+ * @throws RateLimitError immediately on first rate limit (no blocking retries)
  */
 export async function retryWithBackoff<T>(
   fn: () => Promise<T>,
@@ -148,28 +149,26 @@ export async function retryWithBackoff<T>(
     } catch (error) {
       lastError = error as Error;
 
-      // If it's a rate limit error and we have retries left, wait and retry
-      if (isRateLimitError(error) && attempt < maxRetries) {
+      // If it's a rate limit error, throw immediately without blocking
+      // Caller should queue this work for background processing
+      if (isRateLimitError(error)) {
         const retryAfter = parseRateLimitReset(error);
-        const nextRetry = retryAfter || calculateNextRetry(attempt);
-        const delayMs = nextRetry.getTime() - Date.now();
+        console.warn(`Rate limit hit, throwing immediately for background queue processing`);
+        throw new RateLimitError(`Rate limit exceeded, should be queued`, retryAfter);
+      }
 
+      // For non-rate-limit errors, retry with exponential backoff
+      if (attempt < maxRetries) {
+        // Short exponential backoff for transient errors (not rate limits)
+        const delayMs = Math.min(1000 * Math.pow(2, attempt), 10000); // Max 10s
         console.warn(
-          `Rate limit hit, retrying in ${Math.round(delayMs / 1000)}s (attempt ${attempt + 1}/${maxRetries})`
+          `Transient error, retrying in ${delayMs}ms (attempt ${attempt + 1}/${maxRetries}): ${lastError.message}`
         );
-
-        // Wait before retrying
         await new Promise((resolve) => setTimeout(resolve, delayMs));
         continue;
       }
 
-      // If it's a rate limit error but no retries left, throw RateLimitError
-      if (isRateLimitError(error)) {
-        const retryAfter = parseRateLimitReset(error);
-        throw new RateLimitError(`Rate limit exceeded after ${maxRetries} retries`, retryAfter);
-      }
-
-      // For non-rate-limit errors, throw immediately
+      // For non-rate-limit errors, throw after exhausting retries
       throw error;
     }
   }

@@ -16,6 +16,7 @@ export interface IStorage {
   createJobDescription(jobDesc: InsertJobDescription): Promise<JobDescription>;
   getJobDescription(id: string): Promise<JobDescription | undefined>;
   getJobDescriptionByHash(hash: string): Promise<JobDescription | undefined>;
+  getJobDescriptionsByIds(ids: string[]): Promise<JobDescription[]>;
   analyzeJobDescription(id: string, requiredSkills: string[]): Promise<JobDescription>;
 
   // Resume methods
@@ -28,16 +29,23 @@ export interface IStorage {
   createCandidate(candidate: InsertCandidate): Promise<Candidate>;
   getCandidate(id: string): Promise<Candidate | undefined>;
   getCandidatesByResumeIds(resumeIds: string[]): Promise<Candidate[]>;
+  getCandidatesByIds(ids: string[]): Promise<Candidate[]>;
   getCandidateByResumeId(resumeId: string): Promise<Candidate | undefined>;
 
   // Match Result methods
   createMatchResult(matchResult: InsertMatchResult): Promise<MatchResult>;
+  batchCreateMatchResults(results: InsertMatchResult[]): Promise<MatchResult[]>;
   getMatchResultsByJobId(jobId: string): Promise<CandidateWithMatch[]>;
   getMatchResult(candidateId: string, jobId: string): Promise<MatchResult | undefined>;
   getMatchResultByHashes(resumeHash: string, jobHash: string): Promise<MatchResult | undefined>;
   getMatchResultsByHashPairs(
     pairs: Array<{ resumeHash: string; jobHash: string }>
   ): Promise<MatchResult[]>;
+  createMatchAndCompleteJob(
+    matchData: InsertMatchResult,
+    queueItemId: string
+  ): Promise<MatchResult>;
+  batchCompleteMatchJobs(ids: string[]): Promise<void>;
 }
 
 export const storage = new PostgresStorage();

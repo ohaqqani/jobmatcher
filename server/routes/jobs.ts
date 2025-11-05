@@ -4,6 +4,7 @@ import { storage } from "../storage";
 import { analyzeJobDescriptionWithAI } from "../services/jobs";
 import { generateTextHash } from "../services/lib/hash";
 import { isRateLimitError } from "../services/lib/llmRetry";
+import { logger } from "../lib/logger";
 
 const router = Router();
 
@@ -22,16 +23,16 @@ router.post("/api/job-descriptions", async (req, res) => {
 
     // Generate content hash from normalized description only
     const contentHash = generateTextHash(normalizedDescription);
-    console.log(`Generated job description hash: ${contentHash.substring(0, 16)}...`);
+    logger.debug(`Generated job description hash: ${contentHash.substring(0, 16)}...`);
 
     // Check if this exact job description already exists
     let jobDesc = await storage.getJobDescriptionByHash(contentHash);
     if (jobDesc) {
-      console.log(`Duplicate job description detected, found existing record: ${jobDesc.id}`);
+      logger.info(`Duplicate job description detected, found existing record: ${jobDesc.id}`);
 
       // If duplicate has already been analyzed, return it immediately
       if (jobDesc.requiredSkills && jobDesc.requiredSkills.length > 0) {
-        console.log(`Job already analyzed with ${jobDesc.requiredSkills.length} skills`);
+        logger.info(`Job already analyzed with ${jobDesc.requiredSkills.length} skills`);
         return res.json({
           job: jobDesc,
           analysisStatus: "complete",
@@ -39,7 +40,7 @@ router.post("/api/job-descriptions", async (req, res) => {
       }
 
       // If duplicate hasn't been analyzed yet, analyze it now
-      console.log(`Job needs analysis, analyzing now...`);
+      logger.info(`Job needs analysis, analyzing now...`);
     } else {
       // Validate and create new job description with normalized values
       const validatedData = insertJobDescriptionSchema.parse({
@@ -48,7 +49,7 @@ router.post("/api/job-descriptions", async (req, res) => {
         description: normalizedDescription,
       });
       jobDesc = await storage.createJobDescription(validatedData);
-      console.log(`Created new job description: ${jobDesc.id}`);
+      logger.info(`Created new job description: ${jobDesc.id}`);
     }
 
     // Analyze the job description
@@ -58,7 +59,7 @@ router.post("/api/job-descriptions", async (req, res) => {
         normalizedDescription
       );
       const analyzedJobDesc = await storage.analyzeJobDescription(jobDesc.id, requiredSkills);
-      console.log(`Successfully analyzed job with ${requiredSkills.length} skills`);
+      logger.info(`Successfully analyzed job with ${requiredSkills.length} skills`);
 
       return res.json({
         job: analyzedJobDesc,
@@ -67,7 +68,7 @@ router.post("/api/job-descriptions", async (req, res) => {
     } catch (error) {
       if (isRateLimitError(error)) {
         // Add to queue for retry
-        console.log(`Rate limit hit, queueing job ${jobDesc.id} for analysis`);
+        logger.info(`Rate limit hit, queueing job ${jobDesc.id} for analysis`);
         await storage.addToJobAnalysisQueue(jobDesc.id);
         return res.json({
           job: jobDesc,
@@ -127,7 +128,7 @@ router.delete("/api/clear-data", async (req, res) => {
       memStorage.matchResults?.clear();
     }
 
-    console.log("All data cleared for testing");
+    logger.info("All data cleared for testing");
     res.json({ message: "All data cleared successfully" });
   } catch (error) {
     res.status(500).json({ message: error instanceof Error ? error.message : "Unknown error" });

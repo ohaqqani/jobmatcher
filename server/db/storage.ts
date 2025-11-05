@@ -41,6 +41,11 @@ export class PostgresStorage implements IStorage {
     return jobDesc;
   }
 
+  async getJobDescriptionsByIds(ids: string[]): Promise<JobDescription[]> {
+    if (ids.length === 0) return [];
+    return await db.select().from(jobDescriptions).where(inArray(jobDescriptions.id, ids));
+  }
+
   async analyzeJobDescription(id: string, requiredSkills: string[]): Promise<JobDescription> {
     const [updated] = await db
       .update(jobDescriptions)
@@ -97,6 +102,11 @@ export class PostgresStorage implements IStorage {
   async getCandidateByResumeId(resumeId: string): Promise<Candidate | undefined> {
     const [candidate] = await db.select().from(candidates).where(eq(candidates.resumeId, resumeId));
     return candidate;
+  }
+
+  async getCandidatesByIds(ids: string[]): Promise<Candidate[]> {
+    if (ids.length === 0) return [];
+    return await db.select().from(candidates).where(inArray(candidates.id, ids));
   }
 
   // Match Result methods
@@ -310,14 +320,10 @@ export class PostgresStorage implements IStorage {
     error: string,
     nextRetryAt: string
   ): Promise<void> {
-    const [current] = await db
-      .select()
-      .from(candidateExtractionQueue)
-      .where(eq(candidateExtractionQueue.id, id));
     await db
       .update(candidateExtractionQueue)
       .set({
-        attemptCount: (current?.attemptCount || 0) + 1,
+        attemptCount: sql`${candidateExtractionQueue.attemptCount} + 1`,
         lastError: error,
         nextRetryAt: nextRetryAt,
       })
@@ -329,14 +335,10 @@ export class PostgresStorage implements IStorage {
     error: string,
     nextRetryAt: string
   ): Promise<void> {
-    const [current] = await db
-      .select()
-      .from(resumeAnonymizationQueue)
-      .where(eq(resumeAnonymizationQueue.id, id));
     await db
       .update(resumeAnonymizationQueue)
       .set({
-        attemptCount: (current?.attemptCount || 0) + 1,
+        attemptCount: sql`${resumeAnonymizationQueue.attemptCount} + 1`,
         lastError: error,
         nextRetryAt: nextRetryAt,
       })
@@ -344,11 +346,10 @@ export class PostgresStorage implements IStorage {
   }
 
   async incrementJobAnalysisRetry(id: string, error: string, nextRetryAt: string): Promise<void> {
-    const [current] = await db.select().from(jobAnalysisQueue).where(eq(jobAnalysisQueue.id, id));
     await db
       .update(jobAnalysisQueue)
       .set({
-        attemptCount: (current?.attemptCount || 0) + 1,
+        attemptCount: sql`${jobAnalysisQueue.attemptCount} + 1`,
         lastError: error,
         nextRetryAt: nextRetryAt,
       })
@@ -356,14 +357,10 @@ export class PostgresStorage implements IStorage {
   }
 
   async incrementMatchRetry(id: string, error: string, nextRetryAt: string): Promise<void> {
-    const [current] = await db
-      .select()
-      .from(matchProcessingQueue)
-      .where(eq(matchProcessingQueue.id, id));
     await db
       .update(matchProcessingQueue)
       .set({
-        attemptCount: (current?.attemptCount || 0) + 1,
+        attemptCount: sql`${matchProcessingQueue.attemptCount} + 1`,
         lastError: error,
         nextRetryAt: nextRetryAt,
       })
@@ -386,6 +383,11 @@ export class PostgresStorage implements IStorage {
     await db.delete(matchProcessingQueue).where(eq(matchProcessingQueue.id, id));
   }
 
+  async batchCompleteMatchJobs(ids: string[]): Promise<void> {
+    if (ids.length === 0) return;
+    await db.delete(matchProcessingQueue).where(inArray(matchProcessingQueue.id, ids));
+  }
+
   async updateResumeHtml(resumeId: string, html: string): Promise<Resume> {
     const [updated] = await db
       .update(resumes)
@@ -393,5 +395,64 @@ export class PostgresStorage implements IStorage {
       .where(eq(resumes.id, resumeId))
       .returning();
     return updated;
+  }
+
+  /**
+   * Atomically create match result and remove from queue in a transaction
+   * This prevents duplicate matches if worker crashes between operations
+   */
+  async createMatchAndCompleteJob(
+    matchData: InsertMatchResult,
+    queueItemId: string
+  ): Promise<MatchResult> {
+    return await db.transaction(async (tx) => {
+      // Create match result
+      // Type assertion needed due to Drizzle's strict JSONB array type inference
+      const [created] = await tx
+        .insert(matchResults)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .values(matchData as any)
+        .returning();
+
+      // Remove from queue
+      await tx.delete(matchProcessingQueue).where(eq(matchProcessingQueue.id, queueItemId));
+
+      return created;
+    });
+  }
+
+  /**
+   * Batch create match results with chunking and duplicate handling
+   * Chunks large batches to respect PostgreSQL parameter limits
+   * Uses onConflictDoNothing to gracefully handle duplicates
+   * Processes chunks in parallel for optimal performance
+   */
+  async batchCreateMatchResults(results: InsertMatchResult[]): Promise<MatchResult[]> {
+    if (results.length === 0) return [];
+
+    const BATCH_SIZE = 500; // Safe batch size respecting PostgreSQL 65535 param limit
+
+    // Split into chunks
+    const chunks: InsertMatchResult[][] = [];
+    for (let i = 0; i < results.length; i += BATCH_SIZE) {
+      chunks.push(results.slice(i, i + BATCH_SIZE));
+    }
+
+    // Process all chunks in parallel
+    const chunkPromises = chunks.map(async (chunk) => {
+      // Type assertion needed due to Drizzle's strict JSONB array type inference
+      return await db
+        .insert(matchResults)
+        .values(chunk as any) // eslint-disable-line @typescript-eslint/no-explicit-any
+        .returning()
+        .onConflictDoNothing({
+          target: [matchResults.resumeContentHash, matchResults.jobContentHash],
+        });
+    });
+
+    const createdChunks = await Promise.all(chunkPromises);
+
+    // Flatten results from all chunks
+    return createdChunks.flat();
   }
 }
