@@ -38,9 +38,7 @@ async function processQueueItems() {
           const job = await storage.getJobDescription(item.jobDescriptionId);
 
           if (!job) {
-            logger.error(
-              `Job description ${item.jobDescriptionId} not found, removing from queue`
-            );
+            logger.error(`Job description ${item.jobDescriptionId} not found, removing from queue`);
             await storage.completeJobAnalysisJob(item.id);
             return { status: "removed", itemId: item.id };
           }

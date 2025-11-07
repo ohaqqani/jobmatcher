@@ -177,7 +177,9 @@ router.post("/api/job-descriptions/:jobId/match", async (req, res) => {
       const dbInsertTime = Date.now() - dbInsertStart;
 
       // Log summary at info level, details at debug level
-      logger.info(`Successfully created ${createdMatches.length} new match results in ${dbInsertTime}ms`);
+      logger.info(
+        `Successfully created ${createdMatches.length} new match results in ${dbInsertTime}ms`
+      );
       createdMatches.forEach((match, index) => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const matchInfo = newMatches[index] as any;
@@ -199,7 +201,9 @@ router.post("/api/job-descriptions/:jobId/match", async (req, res) => {
     ];
 
     const totalTime = Date.now() - requestStartTime;
-    logger.info(`Candidate matching complete. Processed ${matchResults.length} matches in ${totalTime}ms (LLM: ${llmProcessingTime}ms)`);
+    logger.info(
+      `Candidate matching complete. Processed ${matchResults.length} matches in ${totalTime}ms (LLM: ${llmProcessingTime}ms)`
+    );
     res.json({ matchResults });
   } catch (error) {
     res.status(500).json({ message: error instanceof Error ? error.message : "Unknown error" });
@@ -364,7 +368,9 @@ router.post("/api/job-descriptions/:jobId/match/public", async (req, res) => {
     ];
 
     const totalTime = Date.now() - requestStartTime;
-    logger.info(`Public candidate matching complete. Processed ${matchResults.length} matches in ${totalTime}ms`);
+    logger.info(
+      `Public candidate matching complete. Processed ${matchResults.length} matches in ${totalTime}ms`
+    );
     res.json({ matchResults });
   } catch (error) {
     res.status(500).json({ message: error instanceof Error ? error.message : "Unknown error" });

@@ -1,6 +1,6 @@
 import AdmZip from "adm-zip";
 import mammoth from "mammoth";
-import pdf from "pdf-parse";
+import { extractText } from "unpdf";
 import { openai } from "./lib/openai";
 import { cleanHTMLContent, normalizeText } from "./lib/textProcessing";
 import { retryWithBackoff, shouldSimulateRateLimit, RateLimitError } from "./lib/llmRetry";
@@ -14,20 +14,19 @@ export async function extractTextFromFile(buffer: Buffer, mimetype: string): Pro
   try {
     if (mimetype === "application/pdf") {
       try {
-        // Add more robust PDF parsing with available options
-        const data = await pdf(buffer, {
-          max: 0, // No page limit
-        });
-        text = data.text || "";
+        // Use unpdf for more robust PDF text extraction
+        // mergePages: true returns text as a single string instead of array
+        const extractedData = await extractText(buffer, { mergePages: true });
+        text = extractedData.text || "";
 
-        // If pdf-parse fails, try alternative approach
+        // If extraction yields no text, log for debugging
         if (!text || text.trim().length === 0) {
-          console.log("Primary PDF parsing yielded no text, attempting alternative extraction...");
-          // Try with page limit
-          const fallbackData = await pdf(buffer, {
-            max: 50, // Limit to first 50 pages to avoid memory issues
+          console.log("PDF text extraction yielded no text");
+          console.log("PDF metadata:", {
+            bufferSize: buffer.length,
+            isValidBuffer: Buffer.isBuffer(buffer),
+            totalPages: extractedData.totalPages,
           });
-          text = fallbackData.text || "";
         }
       } catch (pdfError) {
         console.error("PDF parsing error details:", {
@@ -36,20 +35,9 @@ export async function extractTextFromFile(buffer: Buffer, mimetype: string): Pro
           isValidBuffer: Buffer.isBuffer(buffer),
         });
 
-        // Try one more time with minimal options
-        try {
-          console.log("Attempting fallback PDF parsing with minimal options...");
-          const minimalData = await pdf(buffer, { max: 1 }); // Try just first page
-          text = minimalData.text || "";
-          if (text.trim()) {
-            console.log("Fallback PDF parsing succeeded with first page only");
-          }
-        } catch (fallbackError) {
-          console.error("All PDF parsing attempts failed:", fallbackError);
-          throw new Error(
-            `PDF file appears to be corrupted, password-protected, or contains only images. Original error: ${pdfError instanceof Error ? pdfError.message : "Invalid PDF format"}`
-          );
-        }
+        throw new Error(
+          `PDF file appears to be corrupted, password-protected, or contains only images. Original error: ${pdfError instanceof Error ? pdfError.message : "Invalid PDF format"}`
+        );
       }
     } else if (
       mimetype === "application/msword" ||

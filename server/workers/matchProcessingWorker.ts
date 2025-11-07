@@ -78,9 +78,7 @@ async function processQueueItems() {
 
           const job = jobMap.get(item.jobDescriptionId);
           if (!job) {
-            logger.error(
-              `Job description ${item.jobDescriptionId} not found, removing from queue`
-            );
+            logger.error(`Job description ${item.jobDescriptionId} not found, removing from queue`);
             await storage.completeMatchJob(item.id);
             return { status: "removed", itemId: item.id, duration: Date.now() - itemStartTime };
           }
@@ -155,17 +153,15 @@ async function processQueueItems() {
     const totalLlmTime = Date.now() - llmStartTime;
 
     // Calculate LLM statistics
-    const avgLlmTime = llmTimes.length > 0
-      ? Math.round(llmTimes.reduce((a, b) => a + b, 0) / llmTimes.length)
-      : 0;
+    const avgLlmTime =
+      llmTimes.length > 0 ? Math.round(llmTimes.reduce((a, b) => a + b, 0) / llmTimes.length) : 0;
     const minLlmTime = llmTimes.length > 0 ? Math.min(...llmTimes) : 0;
     const maxLlmTime = llmTimes.length > 0 ? Math.max(...llmTimes) : 0;
 
     // Calculate parallelization efficiency
     const theoreticalSequentialTime = llmTimes.reduce((a, b) => a + b, 0);
-    const speedup = theoreticalSequentialTime > 0
-      ? (theoreticalSequentialTime / totalLlmTime).toFixed(2)
-      : "N/A";
+    const speedup =
+      theoreticalSequentialTime > 0 ? (theoreticalSequentialTime / totalLlmTime).toFixed(2) : "N/A";
 
     logger.info(
       `Match processing batch complete: ${succeeded} succeeded, ${requeued} requeued, ${failed} failed, ${removed} removed`
