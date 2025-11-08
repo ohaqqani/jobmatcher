@@ -15,9 +15,13 @@ import {
   startResumeAnonymizationWorker,
   stopResumeAnonymizationWorker,
 } from "./workers/resumeAnonymizationWorker";
+import { initializeGoogleCloudCredentials } from "./lib/gcloud-credentials";
 
 // Load environment variables from .env file
 dotenv.config();
+
+// Initialize Google Cloud credentials (must be done after dotenv.config())
+initializeGoogleCloudCredentials();
 
 const app = express();
 app.use(express.json({ limit: "600mb" }));
