@@ -19,6 +19,9 @@ server/public/
 .env.test.local
 .env.production.local
 
+# Credentials and secrets
+credentials/
+
 # IDE and editor files
 .vscode/
 .idea/

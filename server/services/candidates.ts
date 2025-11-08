@@ -4,32 +4,41 @@ import { extractText } from "unpdf";
 import { openai } from "./lib/openai";
 import { cleanHTMLContent, normalizeText } from "./lib/textProcessing";
 import { retryWithBackoff, shouldSimulateRateLimit, RateLimitError } from "./lib/llmRetry";
+import { extractTextWithOCR } from "./ocr";
+import { logger } from "../lib/logger";
 
-/**
- * Extract text from PDF or DOC/DOCX files
- */
+const MIN_TEXT_LENGTH_FOR_OCR_FALLBACK = 50;
+
 export async function extractTextFromFile(buffer: Buffer, mimetype: string): Promise<string> {
   let text = "";
 
   try {
     if (mimetype === "application/pdf") {
       try {
-        // Use unpdf for more robust PDF text extraction
-        // mergePages: true returns text as a single string instead of array
-        const extractedData = await extractText(buffer, { mergePages: true });
-        text = extractedData.text || "";
+        const { text: extractedText } = await extractText(new Uint8Array(buffer));
 
-        // If extraction yields no text, log for debugging
-        if (!text || text.trim().length === 0) {
-          console.log("PDF text extraction yielded no text");
-          console.log("PDF metadata:", {
-            bufferSize: buffer.length,
-            isValidBuffer: Buffer.isBuffer(buffer),
-            totalPages: extractedData.totalPages,
-          });
+        if (Array.isArray(extractedText)) {
+          text = extractedText.join("\n");
+        } else {
+          text = extractedText || "";
+        }
+
+        logger.info("unpdf extraction complete", { extractedChars: text.length });
+
+        if (text.trim().length < MIN_TEXT_LENGTH_FOR_OCR_FALLBACK) {
+          logger.info("Insufficient text extracted, falling back to OCR");
+          try {
+            text = await extractTextWithOCR(buffer);
+            logger.info("OCR fallback successful", { extractedChars: text.length });
+          } catch (ocrError) {
+            logger.error("OCR fallback failed", ocrError);
+            throw new Error(
+              `Both standard text extraction and OCR failed. ${ocrError instanceof Error ? ocrError.message : "Unknown error"}`
+            );
+          }
         }
       } catch (pdfError) {
-        console.error("PDF parsing error details:", {
+        logger.error("PDF parsing error", {
           error: pdfError instanceof Error ? pdfError.message : "Unknown PDF error",
           bufferSize: buffer.length,
           isValidBuffer: Buffer.isBuffer(buffer),
@@ -47,15 +56,13 @@ export async function extractTextFromFile(buffer: Buffer, mimetype: string): Pro
         const result = await mammoth.extractRawText({ buffer });
         text = result.value || "";
 
-        // Check for extraction warnings
         if (result.messages && result.messages.length > 0) {
-          console.log(
-            "Document extraction warnings:",
-            result.messages.map((m) => m.message)
-          );
+          logger.warn("Document extraction warnings", {
+            warnings: result.messages.map((m) => m.message),
+          });
         }
       } catch (docError) {
-        console.error("Document parsing error:", docError);
+        logger.error("Document parsing error", docError);
         throw new Error(
           `Failed to parse document: ${docError instanceof Error ? docError.message : "Invalid document format"}`
         );
@@ -64,27 +71,35 @@ export async function extractTextFromFile(buffer: Buffer, mimetype: string): Pro
       throw new Error(`Unsupported file type: ${mimetype}`);
     }
 
-    // Clean and normalize the text
     if (text) {
+      const beforeNormalization = text.length;
       text = normalizeText(text);
+      logger.debug("Text normalization complete", {
+        before: beforeNormalization,
+        after: text.length,
+        lost: beforeNormalization - text.length,
+      });
     }
 
-    // More lenient text validation
     if (!text || text.length < 10) {
+      logger.error("Text validation failed", {
+        textLength: text?.length || 0,
+        textPreview: text?.substring(0, 200) || "empty",
+      });
       throw new Error(
         "Extracted text is too short or empty - file may be corrupted, password-protected, or contain only images/scanned content"
       );
     }
 
-    console.log(`Successfully extracted ${text.length} characters of text`);
+    logger.info("Text extraction successful", { totalChars: text.length });
     return text;
   } catch (error) {
-    console.error("Text extraction failed:", {
+    logger.error("Text extraction failed", {
       error: error instanceof Error ? error.message : "Unknown error",
       mimetype,
       bufferSize: buffer.length,
     });
-    throw error; // Re-throw to be handled by calling function
+    throw error;
   }
 }
 
@@ -158,10 +173,8 @@ ${resumeText}`;
 
     const result = JSON.parse(response.choices[0].message.content || "{}");
 
-    // Log the parsed result for debugging
-    console.log("Parsed candidate data:", JSON.stringify(result, null, 2));
+    logger.debug("Parsed candidate data", result);
 
-    // Handle nested candidate object if present
     const candidateData = result.candidate || result;
 
     return {
@@ -206,7 +219,7 @@ ${resumeText}`;
         "Experience details not available",
     };
   } catch (error) {
-    console.error("Failed to extract candidate info:", error);
+    logger.error("Failed to extract candidate info", error);
     throw error;
   }
 }
@@ -215,14 +228,15 @@ ${resumeText}`;
  * Anonymize resume and format as HTML using LLM
  */
 export async function anonymizeResumeAsHTML(resumePlainText: string): Promise<string> {
-  // Input validation
   if (!resumePlainText || resumePlainText.trim().length === 0) {
     return "<div><p>No resume content provided</p></div>";
   }
 
-  // Prevent processing extremely large texts (> 50kb)
   if (resumePlainText.length > 50000) {
-    console.warn("Resume text is very large, truncating for processing");
+    logger.warn("Resume text is very large, truncating for processing", {
+      originalLength: resumePlainText.length,
+      truncatedLength: 50000,
+    });
     resumePlainText = resumePlainText.substring(0, 50000);
   }
 
@@ -276,18 +290,16 @@ ${resumePlainText}`;
     });
   });
 
-  console.log("OpenAI response:", JSON.stringify(response, null, 2));
+  logger.debug("OpenAI response received", { responseId: response.id });
 
   const rawContent = response.choices[0]?.message?.content;
   if (!rawContent) {
-    console.error("No content in response. Full response:", response);
+    logger.error("No content in response", { response });
     throw new Error("No content returned from OpenAI API");
   }
 
-  // Clean up the HTML content to ensure it's embeddable
   const htmlContent = cleanHTMLContent(rawContent);
 
-  // Basic validation - ensure we have some HTML content
   if (htmlContent.length < 10 || !htmlContent.includes("<")) {
     throw new Error("Generated content does not appear to be valid HTML");
   }
